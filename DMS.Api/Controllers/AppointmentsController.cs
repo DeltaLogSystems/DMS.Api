@@ -656,6 +656,129 @@ namespace DMS.Api.Controllers
             }
         }
 
+
+        /// <summary>
+        /// Check if patient has appointment on specific date
+        /// </summary>
+        [HttpGet("check-patient/{patientId}/{appointmentDate}")]
+        public async Task<IActionResult> CheckPatientAppointment(int patientId, DateTime appointmentDate)
+        {
+            try
+            {
+                bool hasAppointment = await AppointmentsDL.PatientHasAppointmentOnDateAsync(
+                    patientId,
+                    appointmentDate
+                );
+
+                object? appointmentData = null;
+
+                if (hasAppointment)
+                {
+                    // Get the appointment details
+                    var dt = await AppointmentsDL.GetAppointmentsByPatientIdAsync(patientId);
+                    var appointment = dt.AsEnumerable()
+                        .Where(row => Convert.ToDateTime(row["AppointmentDate"]).Date == appointmentDate.Date)
+                        .FirstOrDefault();
+
+                    if (appointment != null)
+                    {
+                        appointmentData = new
+                        {
+                            appointmentID = Convert.ToInt32(appointment["AppointmentID"]),
+                            appointmentDate = Convert.ToDateTime(appointment["AppointmentDate"]).ToString("yyyy-MM-dd"),
+                            status = appointment["StatusName"]?.ToString(),
+                            statusColor = appointment["StatusColor"]?.ToString(),
+                            centerName = appointment["CenterName"]?.ToString(),
+                            isRescheduled = Convert.ToBoolean(appointment["IsRescheduled"])
+                        };
+                    }
+                }
+
+                return Ok(new ApiResponse<object>(
+                    ResponseStatus.Success,
+                    hasAppointment
+                        ? "Patient already has an appointment on this date"
+                        : "Patient is available for appointment on this date",
+                    new
+                    {
+                        hasAppointment = hasAppointment,
+                        appointment = appointmentData
+                    }
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error checking patient appointment: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Check slot availability for a center on specific date
+        /// </summary>
+        [HttpGet("check-availability/{centerId}/{appointmentDate}")]
+        public async Task<IActionResult> CheckSlotAvailability(int centerId, DateTime appointmentDate)
+        {
+            try
+            {
+                // Get center configuration
+                var dtConfig = await SlotsDL.GetCenterConfigurationAsync(centerId);
+
+                if (dtConfig.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<object>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Center configuration not found"
+                    ));
+                }
+
+                var configRow = dtConfig.Rows[0];
+                TimeSpan centerOpenTime = (TimeSpan)configRow["CenterOpenTime"];
+                TimeSpan centerCloseTime = (TimeSpan)configRow["CenterCloseTime"];
+                int slotDuration = Convert.ToInt32(configRow["SlotDuration"]);
+
+                // Calculate total possible slots
+                int totalMinutes = (int)(centerCloseTime - centerOpenTime).TotalMinutes;
+                int totalSlots = totalMinutes / slotDuration;
+
+                // Get booked slots count
+                var dtBooked = await AppointmentsDL.GetBookedSlotsAsync(centerId, appointmentDate);
+                int bookedSlots = dtBooked.Rows.Count;
+
+                // Calculate available slots
+                int availableSlots = totalSlots - bookedSlots;
+                bool hasAvailableSlots = availableSlots > 0;
+
+                return Ok(new ApiResponse<object>(
+                    ResponseStatus.Success,
+                    hasAvailableSlots
+                        ? $"{availableSlots} slot(s) available"
+                        : "No slots available",
+                    new
+                    {
+                        hasAvailableSlots = hasAvailableSlots,
+                        totalSlots = totalSlots,
+                        bookedSlots = bookedSlots,
+                        availableSlots = availableSlots,
+                        date = appointmentDate.ToString("yyyy-MM-dd"),
+                        centerOpenTime = centerOpenTime.ToString(@"hh\:mm"),
+                        centerCloseTime = centerCloseTime.ToString(@"hh\:mm"),
+                        slotDuration = slotDuration
+                    }
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<object>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error checking slot availability: {ex.Message}"
+                ));
+            }
+        }
+
+
         #endregion
 
         #region Helper Methods
