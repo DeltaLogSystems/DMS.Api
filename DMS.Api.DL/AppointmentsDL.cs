@@ -1,0 +1,532 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace DMS.Api.DL
+{
+    public static class AppointmentsDL
+    {
+        private static MySQLHelper _sqlHelper = new MySQLHelper();
+
+        #region Validation Methods
+
+        /// <summary>
+        /// Check if patient already has appointment on specific date
+        /// </summary>
+        public static async Task<bool> PatientHasAppointmentOnDateAsync(int patientId, DateTime appointmentDate, int? excludeAppointmentId = null)
+        {
+            string query = excludeAppointmentId.HasValue
+                ? @"SELECT COUNT(*) FROM T_Appointments 
+                    WHERE PatientID = @patientId 
+                    AND AppointmentDate = @appointmentDate 
+                    AND AppointmentStatus NOT IN (5, 6)
+                    AND AppointmentID != @appointmentId"
+                : @"SELECT COUNT(*) FROM T_Appointments 
+                    WHERE PatientID = @patientId 
+                    AND AppointmentDate = @appointmentDate 
+                    AND AppointmentStatus NOT IN (5, 6)";
+
+            object?[] parameters = excludeAppointmentId.HasValue
+                ? new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date, "@appointmentId", excludeAppointmentId.Value }
+                : new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date };
+
+            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            return Convert.ToInt32(result) > 0;
+        }
+
+        /// <summary>
+        /// Check if slot time range is available
+        /// </summary>
+        public static async Task<bool> IsSlotAvailableAsync(int centerId, DateTime slotDate, TimeSpan startTime, TimeSpan endTime, int? excludeAppointmentId = null)
+        {
+            string query = excludeAppointmentId.HasValue
+                ? @"SELECT COUNT(*) FROM T_Slots 
+                    WHERE CenterID = @centerId 
+                    AND SlotDate = @slotDate 
+                    AND IsActive = 1
+                    AND AppointmentID != @appointmentId
+                    AND (
+                        (@startTime >= SlotStartTime AND @startTime < SlotEndTime)
+                        OR (@endTime > SlotStartTime AND @endTime <= SlotEndTime)
+                        OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
+                    )"
+                : @"SELECT COUNT(*) FROM T_Slots 
+                    WHERE CenterID = @centerId 
+                    AND SlotDate = @slotDate 
+                    AND IsActive = 1
+                    AND (
+                        (@startTime >= SlotStartTime AND @startTime < SlotEndTime)
+                        OR (@endTime > SlotStartTime AND @endTime <= SlotEndTime)
+                        OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
+                    )";
+
+            object?[] parameters = excludeAppointmentId.HasValue
+                ? new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime, "@appointmentId", excludeAppointmentId.Value }
+                : new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime };
+
+            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            return Convert.ToInt32(result) == 0;
+        }
+
+        /// <summary>
+        /// Get booked slots for a date and center
+        /// </summary>
+        public static async Task<DataTable> GetBookedSlotsAsync(int centerId, DateTime date)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT s.*, 
+                         a.AppointmentID, a.AppointmentStatus,
+                         p.PatientName, p.PatientCode,
+                         st.StatusName, st.StatusColor
+                  FROM T_Slots s
+                  INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
+                  INNER JOIN M_Patients p ON s.PatientID = p.PatientID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  WHERE s.CenterID = @centerId 
+                  AND s.SlotDate = @date
+                  AND s.IsActive = 1
+                  AND a.AppointmentStatus NOT IN (5, 6)
+                  ORDER BY s.SlotStartTime",
+                "@centerId", centerId,
+                "@date", date.Date
+            );
+            return dt;
+        }
+
+        #endregion
+
+        #region GET Operations
+
+        /// <summary>
+        /// Get all appointments
+        /// </summary>
+        public static async Task<DataTable> GetAllAppointmentsAsync()
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*, 
+                         p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
+                         c.CenterName,
+                         comp.CompanyName,
+                         st.StatusName, st.StatusColor
+                  FROM T_Appointments a
+                  INNER JOIN M_Patients p ON a.PatientID = p.PatientID
+                  INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                  INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  ORDER BY a.AppointmentDate DESC, a.AppointmentID DESC"
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get appointment by ID with slots
+        /// </summary>
+        public static async Task<DataTable> GetAppointmentByIdAsync(int appointmentId)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*, 
+                         p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
+                         c.CenterName,
+                         comp.CompanyName,
+                         st.StatusName, st.StatusColor
+                  FROM T_Appointments a
+                  INNER JOIN M_Patients p ON a.PatientID = p.PatientID
+                  INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                  INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  WHERE a.AppointmentID = @appointmentId",
+                "@appointmentId", appointmentId
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get slots by appointment ID
+        /// </summary>
+        public static async Task<DataTable> GetSlotsByAppointmentIdAsync(int appointmentId)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT * FROM T_Slots 
+                  WHERE AppointmentID = @appointmentId 
+                  AND IsActive = 1
+                  ORDER BY SlotStartTime",
+                "@appointmentId", appointmentId
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get appointments by patient ID
+        /// </summary>
+        public static async Task<DataTable> GetAppointmentsByPatientIdAsync(int patientId)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*, 
+                         p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
+                         c.CenterName,
+                         comp.CompanyName,
+                         st.StatusName, st.StatusColor
+                  FROM T_Appointments a
+                  INNER JOIN M_Patients p ON a.PatientID = p.PatientID
+                  INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                  INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  WHERE a.PatientID = @patientId
+                  ORDER BY a.AppointmentDate DESC",
+                "@patientId", patientId
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get appointments by center and date
+        /// </summary>
+        public static async Task<DataTable> GetAppointmentsByCenterAndDateAsync(int centerId, DateTime date)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*, 
+                         p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
+                         c.CenterName,
+                         comp.CompanyName,
+                         st.StatusName, st.StatusColor
+                  FROM T_Appointments a
+                  INNER JOIN M_Patients p ON a.PatientID = p.PatientID
+                  INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                  INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  WHERE a.CenterID = @centerId 
+                  AND a.AppointmentDate = @date
+                  ORDER BY a.AppointmentID DESC",
+                "@centerId", centerId,
+                "@date", date.Date
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get appointments by date range
+        /// </summary>
+        public static async Task<DataTable> GetAppointmentsByDateRangeAsync(int centerId, DateTime startDate, DateTime endDate)
+        {
+            var dt = await _sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*, 
+                         p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
+                         c.CenterName,
+                         comp.CompanyName,
+                         st.StatusName, st.StatusColor
+                  FROM T_Appointments a
+                  INNER JOIN M_Patients p ON a.PatientID = p.PatientID
+                  INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                  INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                  INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
+                  WHERE a.CenterID = @centerId 
+                  AND a.AppointmentDate BETWEEN @startDate AND @endDate
+                  ORDER BY a.AppointmentDate, a.AppointmentID",
+                "@centerId", centerId,
+                "@startDate", startDate.Date,
+                "@endDate", endDate.Date
+            );
+            return dt;
+        }
+
+        /// <summary>
+        /// Get appointment count by patient (for tracking dialysis cycles)
+        /// </summary>
+        public static async Task<int> GetAppointmentCountByPatientAsync(int patientId, int? statusFilter = null)
+        {
+            string query = statusFilter.HasValue
+                ? "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = @status"
+                : "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = 4"; // Completed only
+
+            object?[] parameters = statusFilter.HasValue
+                ? new object[] { "@patientId", patientId, "@status", statusFilter.Value }
+                : new object[] { "@patientId", patientId };
+
+            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            return Convert.ToInt32(result);
+        }
+
+        #endregion
+
+        #region INSERT Operations
+
+        /// <summary>
+        /// Create new appointment with slot
+        /// </summary>
+        public static async Task<int> CreateAppointmentAsync(
+            int patientId,
+            int centerId,
+            int companyId,
+            DateTime appointmentDate,
+            TimeSpan slotStartTime,
+            TimeSpan slotEndTime,
+            int createdBy)
+        {
+            try
+            {
+                await _sqlHelper.BeginTransactionAsync();
+
+                // Insert appointment
+                var appointmentId = await _sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Appointments 
+                      (PatientID, CenterID, CompanyID, AppointmentStatus, AppointmentDate, 
+                       CreatedBy, CreatedDate, IsRescheduled, RescheduleRevision)
+                      VALUES 
+                      (@patientId, @centerId, @companyId, 1, @appointmentDate,
+                       @createdBy, NOW(), 0, 0);
+                      SELECT LAST_INSERT_ID();",
+                    "@patientId", patientId,
+                    "@centerId", centerId,
+                    "@companyId", companyId,
+                    "@appointmentDate", appointmentDate.Date,
+                    "@createdBy", createdBy
+                );
+
+                int newAppointmentId = Convert.ToInt32(appointmentId);
+
+                // Insert slot
+                await _sqlHelper.ExecNonQueryAsync(
+                    @"INSERT INTO T_Slots 
+                      (AppointmentID, PatientID, CenterID, CompanyID, 
+                       SlotStartTime, SlotEndTime, SlotDate, IsActive)
+                      VALUES 
+                      (@appointmentId, @patientId, @centerId, @companyId,
+                       @slotStartTime, @slotEndTime, @slotDate, 1)",
+                    "@appointmentId", newAppointmentId,
+                    "@patientId", patientId,
+                    "@centerId", centerId,
+                    "@companyId", companyId,
+                    "@slotStartTime", slotStartTime,
+                    "@slotEndTime", slotEndTime,
+                    "@slotDate", appointmentDate.Date
+                );
+
+                await _sqlHelper.CommitAsync();
+                return newAppointmentId;
+            }
+            catch
+            {
+                await _sqlHelper.RollbackAsync();
+                throw;
+            }
+        }
+
+        #endregion
+
+        #region UPDATE Operations
+
+        /// <summary>
+        /// Update appointment status
+        /// </summary>
+        public static async Task<int> UpdateAppointmentStatusAsync(int appointmentId, int newStatus, int modifiedBy)
+        {
+            var result = await _sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Appointments 
+                  SET AppointmentStatus = @newStatus,
+                      ModifiedBy = @modifiedBy,
+                      ModifiedDate = NOW()
+                  WHERE AppointmentID = @appointmentId",
+                "@appointmentId", appointmentId,
+                "@newStatus", newStatus,
+                "@modifiedBy", modifiedBy
+            );
+            return result;
+        }
+
+        /// <summary>
+        /// Reschedule appointment
+        /// </summary>
+        public static async Task<int> RescheduleAppointmentAsync(
+            int appointmentId,
+            DateTime newAppointmentDate,
+            TimeSpan newSlotStartTime,
+            TimeSpan newSlotEndTime,
+            string rescheduleReason,
+            int modifiedBy)
+        {
+            try
+            {
+                await _sqlHelper.BeginTransactionAsync();
+
+                // Get current appointment details
+                var dtAppointment = await _sqlHelper.ExecDataTableAsync(
+                    "SELECT RescheduleRevision FROM T_Appointments WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId
+                );
+
+                if (dtAppointment.Rows.Count == 0)
+                {
+                    throw new Exception("Appointment not found");
+                }
+
+                int currentRevision = Convert.ToInt32(dtAppointment.Rows[0]["RescheduleRevision"]);
+                int newRevision = currentRevision + 1;
+
+                // Update appointment
+                await _sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Appointments 
+                      SET AppointmentDate = @newAppointmentDate,
+                          AppointmentStatus = 7,
+                          IsRescheduled = 1,
+                          RescheduleRevision = @newRevision,
+                          RescheduleReason = @rescheduleReason,
+                          ModifiedBy = @modifiedBy,
+                          ModifiedDate = NOW()
+                      WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId,
+                    "@newAppointmentDate", newAppointmentDate.Date,
+                    "@newRevision", newRevision,
+                    "@rescheduleReason", rescheduleReason,
+                    "@modifiedBy", modifiedBy
+                );
+
+                // Deactivate old slots
+                await _sqlHelper.ExecNonQueryAsync(
+                    "UPDATE T_Slots SET IsActive = 0 WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId
+                );
+
+                // Get appointment details for new slot
+                var dtDetails = await _sqlHelper.ExecDataTableAsync(
+                    "SELECT PatientID, CenterID, CompanyID FROM T_Appointments WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId
+                );
+
+                var row = dtDetails.Rows[0];
+                int patientId = Convert.ToInt32(row["PatientID"]);
+                int centerId = Convert.ToInt32(row["CenterID"]);
+                int companyId = Convert.ToInt32(row["CompanyID"]);
+
+                // Insert new slot
+                await _sqlHelper.ExecNonQueryAsync(
+                    @"INSERT INTO T_Slots 
+                      (AppointmentID, PatientID, CenterID, CompanyID, 
+                       SlotStartTime, SlotEndTime, SlotDate, IsActive)
+                      VALUES 
+                      (@appointmentId, @patientId, @centerId, @companyId,
+                       @slotStartTime, @slotEndTime, @slotDate, 1)",
+                    "@appointmentId", appointmentId,
+                    "@patientId", patientId,
+                    "@centerId", centerId,
+                    "@companyId", companyId,
+                    "@slotStartTime", newSlotStartTime,
+                    "@slotEndTime", newSlotEndTime,
+                    "@slotDate", newAppointmentDate.Date
+                );
+
+                await _sqlHelper.CommitAsync();
+                return appointmentId;
+            }
+            catch
+            {
+                await _sqlHelper.RollbackAsync();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Update patient dialysis cycles and manage cycle progression
+        /// </summary>
+        public static async Task<int> UpdatePatientDialysisCyclesAsync(int patientId, DateTime appointmentDate)
+        {
+            try
+            {
+                await _sqlHelper.BeginTransactionAsync();
+
+                // Get patient's current cycle info
+                var dtPatient = await _sqlHelper.ExecDataTableAsync(
+                    @"SELECT CurrentCycleStartDate, CurrentCycleEndDate 
+              FROM M_Patients 
+              WHERE PatientID = @patientId",
+                    "@patientId", patientId
+                );
+
+                if (dtPatient.Rows.Count == 0)
+                {
+                    throw new Exception("Patient not found");
+                }
+
+                var row = dtPatient.Rows[0];
+                DateTime? cycleStartDate = row["CurrentCycleStartDate"] != DBNull.Value
+                    ? Convert.ToDateTime(row["CurrentCycleStartDate"])
+                    : (DateTime?)null;
+                DateTime? cycleEndDate = row["CurrentCycleEndDate"] != DBNull.Value
+                    ? Convert.ToDateTime(row["CurrentCycleEndDate"])
+                    : (DateTime?)null;
+
+                // If no active cycle, start new one
+                if (!cycleStartDate.HasValue || !cycleEndDate.HasValue)
+                {
+                    await PatientCyclesDL.StartNewCycleAsync(patientId, appointmentDate);
+                }
+                // If cycle has expired, complete it and start new one
+                else if (DateTime.Today > cycleEndDate.Value)
+                {
+                    await PatientCyclesDL.CompleteCycleAndStartNewAsync(patientId);
+                    // Start new cycle with current appointment date
+                    await PatientCyclesDL.StartNewCycleAsync(patientId, appointmentDate);
+                }
+
+                // Update session count for current cycle
+                await PatientCyclesDL.UpdateCycleSessionCountAsync(patientId);
+
+                await _sqlHelper.CommitAsync();
+                return 1;
+            }
+            catch
+            {
+                await _sqlHelper.RollbackAsync();
+                throw;
+            }
+        }
+
+
+        #endregion
+
+        #region DELETE Operations
+
+        /// <summary>
+        /// Cancel appointment (soft delete)
+        /// </summary>
+        public static async Task<int> CancelAppointmentAsync(int appointmentId, int modifiedBy)
+        {
+            return await UpdateAppointmentStatusAsync(appointmentId, 5, modifiedBy); // Status 5 = Cancelled
+        }
+
+        /// <summary>
+        /// Delete appointment permanently
+        /// </summary>
+        public static async Task<int> DeleteAppointmentAsync(int appointmentId)
+        {
+            try
+            {
+                await _sqlHelper.BeginTransactionAsync();
+
+                // Delete slots first (cascade)
+                await _sqlHelper.ExecNonQueryAsync(
+                    "DELETE FROM T_Slots WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId
+                );
+
+                // Delete appointment
+                var result = await _sqlHelper.ExecNonQueryAsync(
+                    "DELETE FROM T_Appointments WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId
+                );
+
+                await _sqlHelper.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await _sqlHelper.RollbackAsync();
+                throw;
+            }
+        }
+
+        #endregion
+    }
+}

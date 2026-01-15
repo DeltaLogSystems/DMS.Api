@@ -752,6 +752,92 @@ namespace DMS.Api.Controllers
 
         #endregion
 
+        #region Appointment Status
+
+        /// <summary>
+        /// Get all appointment statuses
+        /// </summary>
+        [HttpGet("appointment-statuses")]
+        public async Task<IActionResult> GetAllAppointmentStatuses([FromQuery] bool activeOnly = true)
+        {
+            try
+            {
+                var dt = await AppointmentStatusDL.GetAllAppointmentStatusesAsync(activeOnly);
+                var statuses = ConvertDataTableToAppointmentStatusList(dt);
+
+                return Ok(ApiResponse<List<AppointmentStatusResponse>>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    $"Retrieved {statuses.Count} appointment status(es)",
+                    statuses
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<List<AppointmentStatusResponse>>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving appointment statuses: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Get appointment status by ID
+        /// </summary>
+        [HttpGet("appointment-statuses/{id}")]
+        public async Task<IActionResult> GetAppointmentStatusById(int id)
+        {
+            try
+            {
+                var dt = await AppointmentStatusDL.GetAppointmentStatusByIdAsync(id);
+
+                if (dt.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<AppointmentStatusResponse>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Appointment status not found"
+                    ));
+                }
+
+                var status = ConvertRowToAppointmentStatus(dt.Rows[0]);
+
+                return Ok(ApiResponse<AppointmentStatusResponse>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    "Appointment status retrieved successfully",
+                    status
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<AppointmentStatusResponse>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving appointment status: {ex.Message}"
+                ));
+            }
+        }
+
+        #endregion
+
+        // Add these helper methods at the end of MastersController
+
+        private AppointmentStatusResponse ConvertRowToAppointmentStatus(DataRow row)
+        {
+            return new AppointmentStatusResponse
+            {
+                StatusID = Convert.ToInt32(row["StatusID"]),
+                StatusName = row["StatusName"]?.ToString() ?? "",
+                StatusColor = row["StatusColor"]?.ToString() ?? ""
+            };
+        }
+
+        private List<AppointmentStatusResponse> ConvertDataTableToAppointmentStatusList(DataTable dt)
+        {
+            var statuses = new List<AppointmentStatusResponse>();
+            foreach (DataRow row in dt.Rows)
+            {
+                statuses.Add(ConvertRowToAppointmentStatus(row));
+            }
+            return statuses;
+        }
 
     }
 }
