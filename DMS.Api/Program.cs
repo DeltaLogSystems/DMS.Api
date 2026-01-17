@@ -1,4 +1,4 @@
-using DMS.Api.Shared;
+﻿using DMS.Api.Shared;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,12 +10,18 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", builder =>
     {
-        builder.WithOrigins("http://localhost:3000", "http://localhost:5173")
+        builder.WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "https://dms.deltalogapp.online",      // ✅ ADD THIS
+                "http://dms.deltalogapp.online"        // ✅ ADD THIS
+               )
                .AllowAnyMethod()
                .AllowAnyHeader()
                .AllowCredentials();
     });
 });
+
 
 // Add services
 builder.Services.AddControllers()
