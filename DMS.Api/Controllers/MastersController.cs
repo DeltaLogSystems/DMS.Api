@@ -839,5 +839,130 @@ namespace DMS.Api.Controllers
             return statuses;
         }
 
+
+        #region Asset Types
+
+        /// <summary>
+        /// Get all asset types
+        /// </summary>
+        [HttpGet("asset-types")]
+        public async Task<IActionResult> GetAllAssetTypes([FromQuery] bool activeOnly = true)
+        {
+            try
+            {
+                var dt = await AssetTypesDL.GetAllAssetTypesAsync(activeOnly);
+                var assetTypes = ConvertDataTableToAssetTypeList(dt);
+
+                return Ok(ApiResponse<List<AssetTypeResponse>>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    $"Retrieved {assetTypes.Count} asset type(s)",
+                    assetTypes
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<List<AssetTypeResponse>>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving asset types: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Get asset type by ID
+        /// </summary>
+        [HttpGet("asset-types/{id}")]
+        public async Task<IActionResult> GetAssetTypeById(int id)
+        {
+            try
+            {
+                var dt = await AssetTypesDL.GetAssetTypeByIdAsync(id);
+
+                if (dt.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<AssetTypeResponse>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Asset type not found"
+                    ));
+                }
+
+                var assetType = ConvertRowToAssetType(dt.Rows[0]);
+
+                return Ok(ApiResponse<AssetTypeResponse>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    "Asset type retrieved successfully",
+                    assetType
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<AssetTypeResponse>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving asset type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Create new asset type
+        /// </summary>
+        [HttpPost("asset-types")]
+        public async Task<IActionResult> CreateAssetType([FromBody] AssetTypeRequest request)
+        {
+            try
+            {
+                int assetTypeId = await AssetTypesDL.CreateAssetTypeAsync(
+                    request.AssetTypeName,
+                    request.AssetTypeCode,
+                    request.Description,
+                    request.RequiresMaintenance,
+                    request.MaintenanceIntervalDays,
+                    request.CreatedBy
+                );
+
+                return Ok(ApiResponse<int>.SuccessResponse(
+                    ResponseStatus.DataSaved,
+                    "Asset type created successfully",
+                    assetTypeId
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<int>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error creating asset type: {ex.Message}"
+                ));
+            }
+        }
+
+        #endregion
+
+        // Helper methods
+        private AssetTypeResponse ConvertRowToAssetType(DataRow row)
+        {
+            return new AssetTypeResponse
+            {
+                AssetTypeID = Convert.ToInt32(row["AssetTypeID"]),
+                AssetTypeName = row["AssetTypeName"]?.ToString() ?? "",
+                AssetTypeCode = row["AssetTypeCode"]?.ToString() ?? "",
+                Description = row["Description"]?.ToString(),
+                RequiresMaintenance = Convert.ToBoolean(row["RequiresMaintenance"]),
+                MaintenanceIntervalDays = Convert.ToInt32(row["MaintenanceIntervalDays"]),
+                IsActive = Convert.ToBoolean(row["IsActive"]),
+                CreatedDate = Convert.ToDateTime(row["CreatedDate"])
+            };
+        }
+
+        private List<AssetTypeResponse> ConvertDataTableToAssetTypeList(DataTable dt)
+        {
+            var assetTypes = new List<AssetTypeResponse>();
+            foreach (DataRow row in dt.Rows)
+            {
+                assetTypes.Add(ConvertRowToAssetType(row));
+            }
+            return assetTypes;
+        }
+
+
     }
 }
