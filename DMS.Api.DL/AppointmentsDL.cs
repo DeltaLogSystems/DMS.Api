@@ -489,12 +489,47 @@ namespace DMS.Api.DL
         #region DELETE Operations
 
         /// <summary>
-        /// Cancel appointment (soft delete)
+        /// Cancel appointment and deactivate associated slots
         /// </summary>
         public static async Task<int> CancelAppointmentAsync(int appointmentId, int modifiedBy)
         {
-            return await UpdateAppointmentStatusAsync(appointmentId, 5, modifiedBy); // Status 5 = Cancelled
+            try
+            {
+                await _sqlHelper.BeginTransactionAsync();
+
+                // Update appointment status to Cancelled (5)
+                var result = await _sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Appointments 
+              SET AppointmentStatus = 5,
+                  ModifiedBy = @modifiedBy,
+                  ModifiedDate = NOW()
+              WHERE AppointmentID = @appointmentId",
+                    "@appointmentId", appointmentId,
+                    "@modifiedBy", modifiedBy
+                );
+
+                if (result > 0)
+                {
+                    // Deactivate all slots for this appointment
+                    // This makes the time slots available for other patients
+                    await _sqlHelper.ExecNonQueryAsync(
+                        @"UPDATE T_Slots 
+                  SET IsActive = 0
+                  WHERE AppointmentID = @appointmentId",
+                        "@appointmentId", appointmentId
+                    );
+                }
+
+                await _sqlHelper.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await _sqlHelper.RollbackAsync();
+                throw;
+            }
         }
+
 
         /// <summary>
         /// Delete appointment permanently
