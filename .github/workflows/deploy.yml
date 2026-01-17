@@ -1,0 +1,59 @@
+name: Deploy DMS API
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Restore dependencies
+        run: dotnet restore DMS.Api/DMS.Api.csproj
+      
+      - name: Build and publish
+        run: dotnet publish DMS.Api/DMS.Api.csproj -c Release -o ./publish --self-contained true -r linux-x64
+      
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Enable maintenance mode
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "maintenance dms-api on"
+      
+      - name: Stop API service
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl stop dms-api.service || true"
+      
+      - name: Deploy files
+        run: |
+          rsync -avz --delete --exclude 'wwwroot/invoices' --exclude 'wwwroot/uploads' -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}" publish/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/aspnet-apps/dms-api/
+      
+      - name: Fix permissions
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p /var/www/aspnet-apps/dms-api/wwwroot/invoices && chown -R www-data:www-data /var/www/aspnet-apps/dms-api/wwwroot && chmod -R 755 /var/www/aspnet-apps/dms-api/wwwroot"
+      
+      - name: Set permissions
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "chmod +x /var/www/aspnet-apps/dms-api/DMS.Api"
+      
+      - name: Start API service
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "systemctl start dms-api.service"
+      
+      - name: Disable maintenance mode
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "maintenance dms-api off"
