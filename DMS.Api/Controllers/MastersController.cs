@@ -840,7 +840,7 @@ namespace DMS.Api.Controllers
         }
 
 
-        #region Asset Types
+        #region Asset Types - Complete CRUD
 
         /// <summary>
         /// Get all asset types
@@ -911,6 +911,31 @@ namespace DMS.Api.Controllers
         {
             try
             {
+                // Validate request
+                if (string.IsNullOrWhiteSpace(request.AssetTypeName))
+                {
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Asset type name is required"
+                    ));
+                }
+
+                if (string.IsNullOrWhiteSpace(request.AssetTypeCode))
+                {
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Asset type code is required"
+                    ));
+                }
+
+                if (request.RequiresMaintenance && request.MaintenanceIntervalDays <= 0)
+                {
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Maintenance interval days must be greater than 0 when maintenance is required"
+                    ));
+                }
+
                 int assetTypeId = await AssetTypesDL.CreateAssetTypeAsync(
                     request.AssetTypeName,
                     request.AssetTypeCode,
@@ -920,24 +945,218 @@ namespace DMS.Api.Controllers
                     request.CreatedBy
                 );
 
-                return Ok(ApiResponse<int>.SuccessResponse(
+                // Get created asset type
+                var dt = await AssetTypesDL.GetAssetTypeByIdAsync(assetTypeId);
+                var assetType = ConvertRowToAssetType(dt.Rows[0]);
+
+                return Ok(ApiResponse<AssetTypeResponse>.SuccessResponse(
                     ResponseStatus.DataSaved,
                     "Asset type created successfully",
-                    assetTypeId
+                    assetType
                 ));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ApiResponse<int>.ErrorResponse(
+                return StatusCode(500, ApiResponse<AssetTypeResponse>.ErrorResponse(
                     ResponseStatus.InternalServerError,
                     $"Error creating asset type: {ex.Message}"
                 ));
             }
         }
 
+        /// <summary>
+        /// Update asset type
+        /// </summary>
+        [HttpPut("asset-types/{id}")]
+        public async Task<IActionResult> UpdateAssetType(int id, [FromBody] AssetTypeRequest request)
+        {
+            try
+            {
+                // Check if asset type exists
+                var dtExisting = await AssetTypesDL.GetAssetTypeByIdAsync(id);
+                if (dtExisting.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Asset type not found"
+                    ));
+                }
+
+                // Validate request
+                if (string.IsNullOrWhiteSpace(request.AssetTypeName))
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Asset type name is required"
+                    ));
+                }
+
+                if (request.RequiresMaintenance && request.MaintenanceIntervalDays <= 0)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Maintenance interval days must be greater than 0 when maintenance is required"
+                    ));
+                }
+
+                int result = await AssetTypesDL.UpdateAssetTypeAsync(
+                    id,
+                    request.AssetTypeName,
+                    request.Description,
+                    request.RequiresMaintenance,
+                    request.MaintenanceIntervalDays,
+                    request.CreatedBy // Should be ModifiedBy
+                );
+
+                if (result > 0)
+                {
+                    // Get updated asset type
+                    var dt = await AssetTypesDL.GetAssetTypeByIdAsync(id);
+                    var assetType = ConvertRowToAssetType(dt.Rows[0]);
+
+                    return Ok(ApiResponse<AssetTypeResponse>.SuccessResponse(
+                        ResponseStatus.DataUpdated,
+                        "Asset type updated successfully",
+                        assetType
+                    ));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    "Failed to update asset type"
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error updating asset type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Toggle asset type active status
+        /// </summary>
+        [HttpPut("asset-types/{id}/toggle-status")]
+        public async Task<IActionResult> ToggleAssetTypeStatus(
+            int id,
+            [FromQuery] bool isActive,
+            [FromQuery] int modifiedBy)
+        {
+            try
+            {
+                // Check if asset type exists
+                var dtExisting = await AssetTypesDL.GetAssetTypeByIdAsync(id);
+                if (dtExisting.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Asset type not found"
+                    ));
+                }
+
+                var currentStatus = Convert.ToBoolean(dtExisting.Rows[0]["IsActive"]);
+
+                // If trying to set the same status
+                if (currentStatus == isActive)
+                {
+                    return Ok(ApiResponse.SuccessResponse(
+                        $"Asset type is already {(isActive ? "active" : "inactive")}"
+                    ));
+                }
+
+                // If deactivating, check if any active assets exist with this type
+                if (!isActive)
+                {
+                    var dtAssets = await AssetsDL.GetAssetsByTypeAsync(id, null, true);
+                    if (dtAssets.Rows.Count > 0)
+                    {
+                        return Ok(ApiResponse.ErrorResponse(
+                            ResponseStatus.ValidationError,
+                            $"Cannot deactivate asset type. {dtAssets.Rows.Count} active asset(s) exist with this type. Please deactivate or delete all assets first."
+                        ));
+                    }
+                }
+
+                int result = await AssetTypesDL.ToggleAssetTypeStatusAsync(id, isActive, modifiedBy);
+
+                if (result > 0)
+                {
+                    string message = isActive
+                        ? "Asset type activated successfully"
+                        : "Asset type deactivated successfully";
+
+                    return Ok(ApiResponse.SuccessResponse(message));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    "Failed to update asset type status"
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error updating asset type status: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Delete asset type
+        /// </summary>
+        [HttpDelete("asset-types/{id}")]
+        public async Task<IActionResult> DeleteAssetType(int id)
+        {
+            try
+            {
+                // Check if asset type exists
+                var dtExisting = await AssetTypesDL.GetAssetTypeByIdAsync(id);
+                if (dtExisting.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Asset type not found"
+                    ));
+                }
+
+                int result = await AssetTypesDL.DeleteAssetTypeAsync(id);
+
+                if (result > 0)
+                {
+                    return Ok(ApiResponse.SuccessResponse(
+                        "Asset type deleted successfully"
+                    ));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.NotFound,
+                    "Asset type not found"
+                ));
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Thrown when assets exist with this type
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.ValidationError,
+                    ex.Message
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error deleting asset type: {ex.Message}"
+                ));
+            }
+        }
+
         #endregion
 
-        // Helper methods
+        #region Helper Methods for Asset Types
+
         private AssetTypeResponse ConvertRowToAssetType(DataRow row)
         {
             return new AssetTypeResponse
@@ -962,6 +1181,9 @@ namespace DMS.Api.Controllers
             }
             return assetTypes;
         }
+
+        #endregion
+
 
 
     }
