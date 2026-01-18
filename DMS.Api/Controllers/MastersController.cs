@@ -1430,17 +1430,17 @@ namespace DMS.Api.Controllers
             }
         }
 
+        #region Inventory Usage Types
+
         /// <summary>
-        /// Get all usage types
+        /// Get all inventory usage types
         /// </summary>
         [HttpGet("inventory-usage-types")]
-        public async Task<IActionResult> GetAllUsageTypes()
+        public async Task<IActionResult> GetAllUsageTypes([FromQuery] bool activeOnly = true)
         {
             try
             {
-                var dt = await _sqlHelper.ExecDataTableAsync(
-                    "SELECT * FROM M_Inventory_Usage_Types WHERE IsActive = 1 ORDER BY UsageTypeName"
-                );
+                var dt = await UsageTypesDL.GetAllUsageTypesAsync(activeOnly);
 
                 var usageTypes = new List<object>();
                 foreach (DataRow row in dt.Rows)
@@ -1469,6 +1469,52 @@ namespace DMS.Api.Controllers
                 ));
             }
         }
+
+        /// <summary>
+        /// Get inventory usage type by ID
+        /// </summary>
+        [HttpGet("inventory-usage-types/{id}")]
+        public async Task<IActionResult> GetUsageTypeById(int id)
+        {
+            try
+            {
+                var dt = await UsageTypesDL.GetUsageTypeByIdAsync(id);
+
+                if (dt.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<object>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Usage type not found"
+                    ));
+                }
+
+                var row = dt.Rows[0];
+                var usageType = new
+                {
+                    usageTypeID = Convert.ToInt32(row["UsageTypeID"]),
+                    usageTypeName = row["UsageTypeName"]?.ToString(),
+                    usageTypeCode = row["UsageTypeCode"]?.ToString(),
+                    description = row["Description"]?.ToString(),
+                    isActive = Convert.ToBoolean(row["IsActive"])
+                };
+
+                return Ok(ApiResponse<object>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    "Usage type retrieved successfully",
+                    usageType
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<object>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving usage type: {ex.Message}"
+                ));
+            }
+        }
+
+        #endregion
+
 
         #endregion
 
