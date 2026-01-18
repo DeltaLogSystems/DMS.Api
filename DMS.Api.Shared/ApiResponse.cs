@@ -6,7 +6,7 @@
     public class ApiResponse<T>
     {
         public ResponseStatus Status { get; set; }
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
         public T? Data { get; set; }
         public DateTime Timestamp { get; set; }
 
@@ -55,12 +55,12 @@
 
         public ApiResponse(ResponseStatus status, string message) : base(status, message, null) { }
 
-        public new static ApiResponse SuccessResponse(string message = "Operation successful")
+        public static ApiResponse SuccessResponse(string message = "Operation successful")
         {
             return new ApiResponse(ResponseStatus.Success, message);
         }
 
-        public new static ApiResponse ErrorResponse(ResponseStatus status, string message)
+        public static ApiResponse ErrorResponse(ResponseStatus status, string message)
         {
             return new ApiResponse(status, message);
         }

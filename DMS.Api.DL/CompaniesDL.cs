@@ -88,7 +88,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Companies WHERE CompanyName = @companyName AND CompanyID != @companyId"
                 : "SELECT COUNT(*) FROM M_Companies WHERE CompanyName = @companyName";
 
-            object?[] parameters = excludeCompanyId.HasValue
+            object[] parameters = excludeCompanyId.HasValue
                 ? new object[] { "@companyName", companyName, "@companyId", excludeCompanyId.Value }
                 : new object[] { "@companyName", companyName };
 
