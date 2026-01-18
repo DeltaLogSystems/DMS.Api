@@ -126,14 +126,14 @@ namespace DMS.Api.DL
         {
             await EnsureConnectionOpenAsync();
             var cmd = CreateCommand(qry, CommandType.Text, args);
-            return await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection);
+            return await cmd.ExecuteReaderAsync();
         }
 
         public async Task<MySqlDataReader> ExecDataReaderProcAsync(string proc, params object[] args)
         {
             await EnsureConnectionOpenAsync();
             var cmd = CreateCommand(proc, CommandType.StoredProcedure, args);
-            return await cmd.ExecuteReaderAsync(CommandBehavior.CloseConnection);
+            return await cmd.ExecuteReaderAsync();
         }
 
         public async Task<DataTable> ExecDataTableAsync(string qry, params object[] args)
