@@ -147,6 +147,41 @@ namespace DMS.Api.DL
         }
 
         /// <summary>
+        /// Get assets by type name
+        /// </summary>
+        public static async Task<DataTable> GetAssetsByTypeNameAsync(string assetTypeName, int? centerId = null, bool activeOnly = true)
+        {
+            string query = @"SELECT a.*, 
+                            at.AssetTypeName,
+                            c.CenterName,
+                            comp.CompanyName
+                     FROM M_Assets a
+                     INNER JOIN M_Asset_Types at ON a.AssetType = at.AssetTypeID
+                     INNER JOIN M_Centers c ON a.CenterID = c.CenterID
+                     INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
+                     WHERE at.AssetTypeName = @assetTypeName";
+
+            var parameters = new List<object> { "@assetTypeName", assetTypeName };
+
+            if (centerId.HasValue)
+            {
+                query += " AND a.CenterID = @centerId";
+                parameters.Add("@centerId");
+                parameters.Add(centerId.Value);
+            }
+
+            if (activeOnly)
+            {
+                query += " AND a.IsActive = 1";
+            }
+
+            query += " ORDER BY a.AssetCode";
+
+            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+        }
+
+
+        /// <summary>
         /// Get assets requiring maintenance
         /// </summary>
         public static async Task<DataTable> GetAssetsRequiringMaintenanceAsync(int? centerId = null, int daysThreshold = 7)
