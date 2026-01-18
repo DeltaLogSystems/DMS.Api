@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Data;
 using DMS.Api.DL;
 using DMS.Api.Shared;
-using System.Data;
+using Microsoft.AspNetCore.Mvc;
+using MySqlConnector;
 
 namespace DMS.Api.Controllers
 {
@@ -1180,6 +1181,320 @@ namespace DMS.Api.Controllers
                 assetTypes.Add(ConvertRowToAssetType(row));
             }
             return assetTypes;
+        }
+
+        #endregion
+
+        #region Inventory Item Types
+
+        /// <summary>
+        /// Get all inventory item types
+        /// </summary>
+        [HttpGet("inventory-item-types")]
+        public async Task<IActionResult> GetAllInventoryItemTypes([FromQuery] bool activeOnly = true)
+        {
+            try
+            {
+                var dt = await InventoryItemTypesDL.GetAllItemTypesAsync(activeOnly);
+                var itemTypes = ConvertDataTableToInventoryItemTypeList(dt);
+
+                return Ok(ApiResponse<List<InventoryItemTypeResponse>>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    $"Retrieved {itemTypes.Count} inventory item type(s)",
+                    itemTypes
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<List<InventoryItemTypeResponse>>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving inventory item types: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Get inventory item type by ID
+        /// </summary>
+        [HttpGet("inventory-item-types/{id}")]
+        public async Task<IActionResult> GetInventoryItemTypeById(int id)
+        {
+            try
+            {
+                var dt = await InventoryItemTypesDL.GetItemTypeByIdAsync(id);
+
+                if (dt.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<InventoryItemTypeResponse>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Inventory item type not found"
+                    ));
+                }
+
+                var itemType = ConvertRowToInventoryItemType(dt.Rows[0]);
+
+                return Ok(ApiResponse<InventoryItemTypeResponse>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    "Inventory item type retrieved successfully",
+                    itemType
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<InventoryItemTypeResponse>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving inventory item type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Create new inventory item type
+        /// </summary>
+        [HttpPost("inventory-item-types")]
+        public async Task<IActionResult> CreateInventoryItemType([FromBody] InventoryItemTypeRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.ItemTypeName))
+                {
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Item type name is required"
+                    ));
+                }
+
+                if (string.IsNullOrWhiteSpace(request.ItemTypeCode))
+                {
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Item type code is required"
+                    ));
+                }
+
+                int itemTypeId = await InventoryItemTypesDL.CreateItemTypeAsync(
+                    request.ItemTypeName,
+                    request.ItemTypeCode,
+                    request.Description,
+                    request.CreatedBy
+                );
+
+                var dt = await InventoryItemTypesDL.GetItemTypeByIdAsync(itemTypeId);
+                var itemType = ConvertRowToInventoryItemType(dt.Rows[0]);
+
+                return Ok(ApiResponse<InventoryItemTypeResponse>.SuccessResponse(
+                    ResponseStatus.DataSaved,
+                    "Inventory item type created successfully",
+                    itemType
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<InventoryItemTypeResponse>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error creating inventory item type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Update inventory item type
+        /// </summary>
+        [HttpPut("inventory-item-types/{id}")]
+        public async Task<IActionResult> UpdateInventoryItemType(int id, [FromBody] InventoryItemTypeRequest request)
+        {
+            try
+            {
+                var dtExisting = await InventoryItemTypesDL.GetItemTypeByIdAsync(id);
+                if (dtExisting.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Inventory item type not found"
+                    ));
+                }
+
+                int result = await InventoryItemTypesDL.UpdateItemTypeAsync(
+                    id,
+                    request.ItemTypeName,
+                    request.Description,
+                    request.CreatedBy
+                );
+
+                if (result > 0)
+                {
+                    var dt = await InventoryItemTypesDL.GetItemTypeByIdAsync(id);
+                    var itemType = ConvertRowToInventoryItemType(dt.Rows[0]);
+
+                    return Ok(ApiResponse<InventoryItemTypeResponse>.SuccessResponse(
+                        ResponseStatus.DataUpdated,
+                        "Inventory item type updated successfully",
+                        itemType
+                    ));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    "Failed to update inventory item type"
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error updating inventory item type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Toggle inventory item type status
+        /// </summary>
+        [HttpPut("inventory-item-types/{id}/toggle-status")]
+        public async Task<IActionResult> ToggleInventoryItemTypeStatus(
+            int id,
+            [FromQuery] bool isActive,
+            [FromQuery] int modifiedBy)
+        {
+            try
+            {
+                var dtExisting = await InventoryItemTypesDL.GetItemTypeByIdAsync(id);
+                if (dtExisting.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Inventory item type not found"
+                    ));
+                }
+
+                int result = await InventoryItemTypesDL.ToggleItemTypeStatusAsync(id, isActive, modifiedBy);
+
+                if (result > 0)
+                {
+                    string message = isActive
+                        ? "Inventory item type activated successfully"
+                        : "Inventory item type deactivated successfully";
+
+                    return Ok(ApiResponse.SuccessResponse(message));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    "Failed to update inventory item type status"
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error updating inventory item type status: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Delete inventory item type
+        /// </summary>
+        [HttpDelete("inventory-item-types/{id}")]
+        public async Task<IActionResult> DeleteInventoryItemType(int id)
+        {
+            try
+            {
+                int result = await InventoryItemTypesDL.DeleteItemTypeAsync(id);
+
+                if (result > 0)
+                {
+                    return Ok(ApiResponse.SuccessResponse(
+                        "Inventory item type deleted successfully"
+                    ));
+                }
+
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.NotFound,
+                    "Inventory item type not found"
+                ));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Ok(ApiResponse.ErrorResponse(
+                    ResponseStatus.ValidationError,
+                    ex.Message
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error deleting inventory item type: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Get all usage types
+        /// </summary>
+        [HttpGet("inventory-usage-types")]
+        public async Task<IActionResult> GetAllUsageTypes()
+        {
+            try
+            {
+                var dt = await _sqlHelper.ExecDataTableAsync(
+                    "SELECT * FROM M_Inventory_Usage_Types WHERE IsActive = 1 ORDER BY UsageTypeName"
+                );
+
+                var usageTypes = new List<object>();
+                foreach (DataRow row in dt.Rows)
+                {
+                    usageTypes.Add(new
+                    {
+                        usageTypeID = Convert.ToInt32(row["UsageTypeID"]),
+                        usageTypeName = row["UsageTypeName"]?.ToString(),
+                        usageTypeCode = row["UsageTypeCode"]?.ToString(),
+                        description = row["Description"]?.ToString(),
+                        isActive = Convert.ToBoolean(row["IsActive"])
+                    });
+                }
+
+                return Ok(ApiResponse<List<object>>.SuccessResponse(
+                    ResponseStatus.DataRetrieved,
+                    $"Retrieved {usageTypes.Count} usage type(s)",
+                    usageTypes
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse<List<object>>.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error retrieving usage types: {ex.Message}"
+                ));
+            }
+        }
+
+        #endregion
+
+        #region Helper Methods for Inventory
+
+        private InventoryItemTypeResponse ConvertRowToInventoryItemType(DataRow row)
+        {
+            return new InventoryItemTypeResponse
+            {
+                ItemTypeID = Convert.ToInt32(row["ItemTypeID"]),
+                ItemTypeName = row["ItemTypeName"]?.ToString() ?? "",
+                ItemTypeCode = row["ItemTypeCode"]?.ToString() ?? "",
+                Description = row["Description"]?.ToString(),
+                IsActive = Convert.ToBoolean(row["IsActive"]),
+                CreatedDate = Convert.ToDateTime(row["CreatedDate"])
+            };
+        }
+
+        private List<InventoryItemTypeResponse> ConvertDataTableToInventoryItemTypeList(DataTable dt)
+        {
+            var itemTypes = new List<InventoryItemTypeResponse>();
+            foreach (DataRow row in dt.Rows)
+            {
+                itemTypes.Add(ConvertRowToInventoryItemType(row));
+            }
+            return itemTypes;
         }
 
         #endregion
