@@ -124,7 +124,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Centers WHERE CenterName = @centerName AND CompanyID = @companyId AND CenterID != @centerId"
                 : "SELECT COUNT(*) FROM M_Centers WHERE CenterName = @centerName AND CompanyID = @companyId";
 
-            object?[] parameters = excludeCenterId.HasValue
+            object[] parameters = excludeCenterId.HasValue
                 ? new object[] { "@centerName", centerName, "@companyId", companyId, "@centerId", excludeCenterId.Value }
                 : new object[] { "@centerName", centerName, "@companyId", companyId };
 

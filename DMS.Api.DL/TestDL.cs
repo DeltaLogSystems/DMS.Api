@@ -9,12 +9,7 @@ namespace DMS.Api.DL
 {
     public static class TestDL
     {
-        private static MySQLHelper _sqlHelper = null;
-
-        static TestDL()
-        {
-            _sqlHelper = new MySQLHelper();
-        }
+        private static MySQLHelper _sqlHelper = new MySQLHelper();
 
         /// <summary>
         /// Tests MySQL connection and returns server version

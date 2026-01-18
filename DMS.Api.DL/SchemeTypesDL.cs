@@ -54,7 +54,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_SchemeTypes WHERE SchemeTypeName = @schemeTypeName AND SchemeTypeID != @schemeTypeId"
                 : "SELECT COUNT(*) FROM M_SchemeTypes WHERE SchemeTypeName = @schemeTypeName";
 
-            object?[] parameters = excludeSchemeTypeId.HasValue
+            object[] parameters = excludeSchemeTypeId.HasValue
                 ? new object[] { "@schemeTypeName", schemeTypeName, "@schemeTypeId", excludeSchemeTypeId.Value }
                 : new object[] { "@schemeTypeName", schemeTypeName };
 

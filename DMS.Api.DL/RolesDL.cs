@@ -64,7 +64,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Roles WHERE RoleName = @roleName AND RoleID != @roleId"
                 : "SELECT COUNT(*) FROM M_Roles WHERE RoleName = @roleName";
 
-            object?[] parameters = excludeRoleId.HasValue
+            object[] parameters = excludeRoleId.HasValue
                 ? new object[] { "@roleName", roleName, "@roleId", excludeRoleId.Value }
                 : new object[] { "@roleName", roleName };
 

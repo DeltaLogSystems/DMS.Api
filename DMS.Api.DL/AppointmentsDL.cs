@@ -29,7 +29,7 @@ namespace DMS.Api.DL
                     AND AppointmentDate = @appointmentDate 
                     AND AppointmentStatus NOT IN (5, 6)";
 
-            object?[] parameters = excludeAppointmentId.HasValue
+            object[] parameters = excludeAppointmentId.HasValue
                 ? new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date, "@appointmentId", excludeAppointmentId.Value }
                 : new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date };
 
@@ -63,7 +63,7 @@ namespace DMS.Api.DL
                         OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
                     )";
 
-            object?[] parameters = excludeAppointmentId.HasValue
+            object[] parameters = excludeAppointmentId.HasValue
                 ? new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime, "@appointmentId", excludeAppointmentId.Value }
                 : new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime };
 
@@ -241,7 +241,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = @status"
                 : "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = 4"; // Completed only
 
-            object?[] parameters = statusFilter.HasValue
+            object[] parameters = statusFilter.HasValue
                 ? new object[] { "@patientId", patientId, "@status", statusFilter.Value }
                 : new object[] { "@patientId", patientId };
 

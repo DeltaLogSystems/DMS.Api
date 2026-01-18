@@ -334,7 +334,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Patients WHERE MobileNo = @mobileNo AND PatientID != @patientId"
                 : "SELECT COUNT(*) FROM M_Patients WHERE MobileNo = @mobileNo";
 
-            object?[] parameters = excludePatientId.HasValue
+            object[] parameters = excludePatientId.HasValue
                 ? new object[] { "@mobileNo", mobileNo, "@patientId", excludePatientId.Value }
                 : new object[] { "@mobileNo", mobileNo };
 

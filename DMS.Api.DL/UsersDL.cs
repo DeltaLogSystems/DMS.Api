@@ -200,7 +200,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Users WHERE UserName = @username AND UserID != @userId"
                 : "SELECT COUNT(*) FROM M_Users WHERE UserName = @username";
 
-            object?[] parameters = excludeUserId.HasValue
+            object[] parameters = excludeUserId.HasValue
                 ? new object[] { "@username", username, "@userId", excludeUserId.Value }
                 : new object[] { "@username", username };
 
@@ -217,7 +217,7 @@ namespace DMS.Api.DL
                 ? "SELECT COUNT(*) FROM M_Users WHERE EmailID = @email AND UserID != @userId"
                 : "SELECT COUNT(*) FROM M_Users WHERE EmailID = @email";
 
-            object?[] parameters = excludeUserId.HasValue
+            object[] parameters = excludeUserId.HasValue
                 ? new object[] { "@email", email, "@userId", excludeUserId.Value }
                 : new object[] { "@email", email };
 
