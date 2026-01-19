@@ -74,7 +74,6 @@ namespace DMS.Api.Shared
 
         // Appointment Details
         public int AppointmentID { get; set; }
-        public string AppointmentCode { get; set; } = "";
         public DateTime AppointmentDate { get; set; }
 
         // Patient Details
