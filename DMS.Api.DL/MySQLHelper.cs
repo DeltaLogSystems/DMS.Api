@@ -37,6 +37,22 @@ namespace DMS.Api.DL
         private async Task EnsureConnectionOpenAsync()
         {
             if (_conn == null) throw new ObjectDisposedException(nameof(MySQLHelper));
+
+            // If connection is broken or closed, dispose and recreate it
+            if (_conn.State == ConnectionState.Broken || _conn.State == ConnectionState.Closed)
+            {
+                try
+                {
+                    await _conn.DisposeAsync();
+                }
+                catch
+                {
+                    // Ignore disposal errors
+                }
+
+                _conn = new MySqlConnection(_connString);
+            }
+
             if (_conn.State != ConnectionState.Open)
             {
                 await _conn.OpenAsync();
