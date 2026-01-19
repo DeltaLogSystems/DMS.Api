@@ -18,15 +18,24 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<string> GenerateSessionCodeAsync(int centerId, DateTime sessionDate)
         {
-            // Get center code
+            // Get center name and create code from initials
             var dtCenter = await _sqlHelper.ExecDataTableAsync(
-                "SELECT CenterCode FROM M_Centers WHERE CenterID = @centerId",
+                "SELECT CenterName FROM M_Centers WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
 
-            string centerCode = dtCenter.Rows.Count > 0
-                ? dtCenter.Rows[0]["CenterCode"]?.ToString()?.Substring(0, Math.Min(3, dtCenter.Rows[0]["CenterCode"]?.ToString()?.Length ?? 0)).ToUpper() ?? "CTR"
-                : "CTR";
+            string centerCode = "CTR";
+            if (dtCenter.Rows.Count > 0)
+            {
+                string centerName = dtCenter.Rows[0]["CenterName"]?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(centerName))
+                {
+                    // Extract initials from center name (e.g., "Nephro Dialysis Centre" -> "NDC")
+                    var words = centerName.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    centerCode = string.Join("", words.Select(w => w[0])).ToUpper();
+                    centerCode = centerCode.Substring(0, Math.Min(3, centerCode.Length));
+                }
+            }
 
             // Format: SES-CTR-20260118-001
             string dateStr = sessionDate.ToString("yyyyMMdd");
@@ -58,9 +67,9 @@ namespace DMS.Api.DL
             DateTime? sessionDate = null,
             string? sessionStatus = null)
         {
-            string query = @"SELECT s.*, 
+            string query = @"SELECT s.*,
                                     p.PatientCode, p.PatientName,
-                                    a.AppointmentCode, a.AppointmentDate,
+                                    a.AppointmentDate,
                                     ast.AssetCode, ast.AssetName,
                                     c.CenterName
                              FROM T_Dialysis_Sessions s
@@ -111,9 +120,9 @@ namespace DMS.Api.DL
         public static async Task<DataTable> GetSessionByIdAsync(int sessionId)
         {
             return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT s.*, 
-                         p.PatientCode, p.PatientName, p.ContactNumber,
-                         a.AppointmentCode, a.AppointmentDate, a.SlotStartTime, a.SlotEndTime,
+                @"SELECT s.*,
+                         p.PatientCode, p.PatientName, p.MobileNo,
+                         a.AppointmentDate,
                          ast.AssetCode, ast.AssetName,
                          c.CenterName
                   FROM T_Dialysis_Sessions s

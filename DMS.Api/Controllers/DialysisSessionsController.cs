@@ -546,14 +546,13 @@ namespace DMS.Api.Controllers
                 SessionID = Convert.ToInt32(row["SessionID"]),
                 SessionCode = row["SessionCode"]?.ToString() ?? "",
                 AppointmentID = Convert.ToInt32(row["AppointmentID"]),
-                AppointmentCode = row["AppointmentCode"]?.ToString() ?? "",
                 AppointmentDate = row["AppointmentDate"] != DBNull.Value
                     ? Convert.ToDateTime(row["AppointmentDate"])
                     : DateTime.MinValue,
                 PatientID = Convert.ToInt32(row["PatientID"]),
                 PatientCode = row["PatientCode"]?.ToString() ?? "",
                 PatientName = row["PatientName"]?.ToString() ?? "",
-                ContactNumber = row["ContactNumber"]?.ToString(),
+                ContactNumber = row.Table.Columns.Contains("MobileNo") ? row["MobileNo"]?.ToString() : null,
                 CenterID = Convert.ToInt32(row["CenterID"]),
                 CenterName = row["CenterName"]?.ToString() ?? "",
                 AssetID = row["AssetID"] != DBNull.Value
