@@ -210,12 +210,13 @@ namespace DMS.Api.Controllers
                     ));
                 }
 
-                // Validate slot times
-                if (request.SlotStartTime >= request.SlotEndTime)
+                // Validate slot times (handle midnight crossover)
+                var slotDuration = CalculateSlotDuration(request.SlotStartTime, request.SlotEndTime);
+                if (slotDuration <= TimeSpan.Zero || slotDuration > TimeSpan.FromHours(24))
                 {
                     return Ok(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.ValidationError,
-                        "Slot end time must be after start time"
+                        "Invalid slot duration. Duration must be between 1 minute and 24 hours."
                     ));
                 }
 
@@ -527,6 +528,16 @@ namespace DMS.Api.Controllers
                     ));
                 }
 
+                // Validate slot times (handle midnight crossover)
+                var slotDuration = CalculateSlotDuration(request.NewSlotStartTime, request.NewSlotEndTime);
+                if (slotDuration <= TimeSpan.Zero || slotDuration > TimeSpan.FromHours(24))
+                {
+                    return Ok(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Invalid slot duration. Duration must be between 1 minute and 24 hours."
+                    ));
+                }
+
                 // Check if patient already has appointment on new date (excluding current appointment)
                 bool hasAppointment = await AppointmentsDL.PatientHasAppointmentOnDateAsync(
                     patientId,
@@ -782,6 +793,24 @@ namespace DMS.Api.Controllers
         #endregion
 
         #region Helper Methods
+
+        /// <summary>
+        /// Calculate slot duration handling midnight crossover
+        /// </summary>
+        private TimeSpan CalculateSlotDuration(TimeSpan startTime, TimeSpan endTime)
+        {
+            if (endTime > startTime)
+            {
+                // Normal case: same day slot
+                return endTime - startTime;
+            }
+            else
+            {
+                // Midnight crossover: slot spans into next day
+                // Duration = (24:00:00 - startTime) + endTime
+                return TimeSpan.FromHours(24) - startTime + endTime;
+            }
+        }
 
         private async Task<AppointmentResponse> ConvertRowToAppointmentAsync(DataRow row)
         {
