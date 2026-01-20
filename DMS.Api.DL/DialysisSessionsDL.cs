@@ -9,17 +9,18 @@ namespace DMS.Api.DL
 {
     public static class DialysisSessionsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region Session Code Generation
 
         /// <summary>
         /// Generate unique session code
         /// </summary>
-        public static async Task<string> GenerateSessionCodeAsync(int centerId, DateTime sessionDate)
+        private static async Task<string> GenerateSessionCodeAsync(MySQLHelper sqlHelper, int centerId, DateTime sessionDate)
         {
             // Get center name and create code from initials
-            var dtCenter = await _sqlHelper.ExecDataTableAsync(
+            var dtCenter = await sqlHelper.ExecDataTableAsync(
                 "SELECT CenterName FROM M_Centers WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -40,9 +41,9 @@ namespace DMS.Api.DL
             // Format: SES-CTR-20260118-001
             string dateStr = sessionDate.ToString("yyyyMMdd");
 
-            var lastNumber = await _sqlHelper.ExecScalarAsync(
-                @"SELECT MAX(CAST(SUBSTRING(SessionCode, -3) AS UNSIGNED)) 
-                  FROM T_Dialysis_Sessions 
+            var lastNumber = await sqlHelper.ExecScalarAsync(
+                @"SELECT MAX(CAST(SUBSTRING(SessionCode, -3) AS UNSIGNED))
+                  FROM T_Dialysis_Sessions
                   WHERE SessionCode LIKE @pattern",
                 "@pattern", $"SES-{centerCode}-{dateStr}-%"
             );
@@ -67,6 +68,8 @@ namespace DMS.Api.DL
             DateTime? sessionDate = null,
             string? sessionStatus = null)
         {
+            using var sqlHelper = new MySQLHelper();
+
             string query = @"SELECT s.*,
                                     p.PatientCode, p.PatientName,
                                     a.AppointmentDate,
@@ -111,7 +114,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY s.SessionDate DESC, s.ActualStartTime DESC";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -119,7 +122,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionByIdAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT s.*,
                          p.PatientCode, p.PatientName, p.MobileNo,
                          a.AppointmentDate,
@@ -140,8 +144,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionByAppointmentAsync(int appointmentId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT s.*, 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT s.*,
                          p.PatientCode, p.PatientName,
                          ast.AssetCode, ast.AssetName
                   FROM T_Dialysis_Sessions s
@@ -157,7 +162,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActiveSessionsAsync(int? centerId = null)
         {
-            string query = @"SELECT s.*, 
+            using var sqlHelper = new MySQLHelper();
+
+            string query = @"SELECT s.*,
                                     p.PatientCode, p.PatientName,
                                     ast.AssetCode, ast.AssetName,
                                     TIMESTAMPDIFF(MINUTE, s.ActualStartTime, NOW()) as ElapsedMinutes
@@ -177,7 +184,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY s.ActualStartTime";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         #endregion
@@ -197,20 +204,21 @@ namespace DMS.Api.DL
             string? preSessionNotes,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Generate session code
-                string sessionCode = await GenerateSessionCodeAsync(centerId, sessionDate);
+                string sessionCode = await GenerateSessionCodeAsync(sqlHelper, centerId, sessionDate);
 
                 // Create session
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Dialysis_Sessions 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Dialysis_Sessions
                       (SessionCode, AppointmentID, PatientID, CenterID, SessionStatus,
                        SessionDate, ScheduledStartTime, DialysisType, PreSessionNotes,
                        CreatedDate, CreatedBy)
-                      VALUES 
+                      VALUES
                       (@sessionCode, @appointmentId, @patientId, @centerId, 'Not Started',
                        @sessionDate, @scheduledStartTime, @dialysisType, @preSessionNotes,
                        NOW(), @createdBy);
@@ -232,14 +240,14 @@ namespace DMS.Api.DL
                 await AppointmentsDL.UpdateAppointmentStatusAsync(appointmentId, 2, createdBy); // Status 2 = In Progress
 
                 // Log timeline event
-                await InsertTimelineEventAsync(sessionId, "SessionCreated", "Dialysis session created", createdBy);
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionCreated", "Dialysis session created", createdBy);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return sessionId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -257,13 +265,14 @@ namespace DMS.Api.DL
             int assetAssignmentId,
             int modifiedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Update session
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Dialysis_Sessions 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Dialysis_Sessions
                       SET AssetID = @assetId,
                           AssetAssignmentID = @assetAssignmentId,
                           ModifiedDate = NOW(),
@@ -280,14 +289,14 @@ namespace DMS.Api.DL
                 string assetCode = dtAsset.Rows.Count > 0 ? dtAsset.Rows[0]["AssetCode"]?.ToString() ?? "" : "";
 
                 // Log timeline event
-                await InsertTimelineEventAsync(sessionId, "MachineAssigned", $"Dialysis machine {assetCode} assigned", modifiedBy);
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "MachineAssigned", $"Dialysis machine {assetCode} assigned", modifiedBy);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -299,13 +308,14 @@ namespace DMS.Api.DL
             int sessionId,
             int startedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Update session
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Dialysis_Sessions 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Dialysis_Sessions
                       SET SessionStatus = 'In Progress',
                           ActualStartTime = NOW(),
                           StartedBy = @startedBy,
@@ -317,14 +327,14 @@ namespace DMS.Api.DL
                 );
 
                 // Log timeline event
-                await InsertTimelineEventAsync(sessionId, "SessionStarted", "Dialysis session started", startedBy);
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionStarted", "Dialysis session started", startedBy);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -337,9 +347,10 @@ namespace DMS.Api.DL
             string? postSessionNotes,
             int completedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Calculate duration
                 var dtSession = await GetSessionByIdAsync(sessionId);
@@ -351,8 +362,8 @@ namespace DMS.Api.DL
                 int appointmentId = Convert.ToInt32(dtSession.Rows[0]["AppointmentID"]);
 
                 // Update session
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Dialysis_Sessions 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Dialysis_Sessions
                       SET SessionStatus = 'Completed',
                           ActualEndTime = NOW(),
                           SessionDuration = TIMESTAMPDIFF(MINUTE, ActualStartTime, NOW()),
@@ -377,14 +388,14 @@ namespace DMS.Api.DL
                 }
 
                 // Log timeline event
-                await InsertTimelineEventAsync(sessionId, "SessionCompleted", "Dialysis session completed successfully", completedBy);
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionCompleted", "Dialysis session completed successfully", completedBy);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -397,9 +408,10 @@ namespace DMS.Api.DL
             string terminationReason,
             int completedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 var dtSession = await GetSessionByIdAsync(sessionId);
                 if (dtSession.Rows.Count == 0)
@@ -410,8 +422,8 @@ namespace DMS.Api.DL
                 int appointmentId = Convert.ToInt32(dtSession.Rows[0]["AppointmentID"]);
 
                 // Update session
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Dialysis_Sessions 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Dialysis_Sessions
                       SET SessionStatus = 'Terminated',
                           ActualEndTime = NOW(),
                           SessionDuration = TIMESTAMPDIFF(MINUTE, ActualStartTime, NOW()),
@@ -436,14 +448,14 @@ namespace DMS.Api.DL
                 }
 
                 // Log timeline event
-                await InsertTimelineEventAsync(sessionId, "SessionTerminated", $"Session terminated: {terminationReason}", completedBy);
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionTerminated", $"Session terminated: {terminationReason}", completedBy);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -453,18 +465,19 @@ namespace DMS.Api.DL
         #region Timeline Operations
 
         /// <summary>
-        /// Insert timeline event
+        /// Insert timeline event (private helper for use within transactions)
         /// </summary>
-        public static async Task<int> InsertTimelineEventAsync(
+        private static async Task<int> InsertTimelineEventAsync(
+            MySQLHelper sqlHelper,
             int sessionId,
             string eventType,
             string eventDescription,
             int performedBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
-                @"INSERT INTO T_Session_Timeline 
+            var result = await sqlHelper.ExecScalarAsync(
+                @"INSERT INTO T_Session_Timeline
                   (SessionID, EventType, EventDescription, EventTime, PerformedBy)
-                  VALUES 
+                  VALUES
                   (@sessionId, @eventType, @eventDescription, NOW(), @performedBy);
                   SELECT LAST_INSERT_ID();",
                 "@sessionId", sessionId,
@@ -481,9 +494,10 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionTimelineAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT * FROM T_Session_Timeline 
-                  WHERE SessionID = @sessionId 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT * FROM T_Session_Timeline
+                  WHERE SessionID = @sessionId
                   ORDER BY EventTime",
                 "@sessionId", sessionId
             );
