@@ -57,7 +57,25 @@ namespace DMS.Api.Shared
         public TimeSpan SlotStartTime { get; set; }
         public TimeSpan SlotEndTime { get; set; }
         public DateTime SlotDate { get; set; }
-        public string SlotTimeRange => $"{SlotStartTime:hh\\:mm} - {SlotEndTime:hh\\:mm}";
+        public string SlotTimeRange => $"{FormatTime(SlotStartTime)} - {FormatTime(SlotEndTime)}";
+
+        /// <summary>
+        /// Format TimeSpan to handle times crossing midnight (normalize to 24-hour cycle)
+        /// </summary>
+        private string FormatTime(TimeSpan time)
+        {
+            // Normalize time to 24-hour cycle (handle times >= 24:00)
+            int totalHours = (int)time.TotalHours;
+            int normalizedHours = totalHours % 24;
+            int minutes = time.Minutes;
+
+            // Create a normalized TimeSpan
+            var normalizedTime = new TimeSpan(normalizedHours, minutes, 0);
+
+            // Format in 12-hour format with AM/PM
+            DateTime dateTime = DateTime.Today.Add(normalizedTime);
+            return dateTime.ToString("hh:mm tt");
+        }
     }
 
     /// <summary>
@@ -113,9 +131,27 @@ namespace DMS.Api.Shared
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
         public bool IsAvailable { get; set; }
-        public string TimeRange => $"{StartTime:hh\\:mm} - {EndTime:hh\\:mm}";
+        public string TimeRange => $"{FormatTime(StartTime)} - {FormatTime(EndTime)}";
         public int? AppointmentID { get; set; }
         public string? PatientName { get; set; }
+
+        /// <summary>
+        /// Format TimeSpan to handle times crossing midnight (normalize to 24-hour cycle)
+        /// </summary>
+        private string FormatTime(TimeSpan time)
+        {
+            // Normalize time to 24-hour cycle (handle times >= 24:00)
+            int totalHours = (int)time.TotalHours;
+            int normalizedHours = totalHours % 24;
+            int minutes = time.Minutes;
+
+            // Create a normalized TimeSpan
+            var normalizedTime = new TimeSpan(normalizedHours, minutes, 0);
+
+            // Format in 12-hour format with AM/PM
+            DateTime dateTime = DateTime.Today.Add(normalizedTime);
+            return dateTime.ToString("hh:mm tt");
+        }
     }
 
     /// <summary>
