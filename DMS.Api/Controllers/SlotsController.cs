@@ -212,10 +212,12 @@ namespace DMS.Api.Controllers
 
             while (currentTime.Add(TimeSpan.FromMinutes(durationMinutes)) <= closeTime)
             {
+                TimeSpan endTime = currentTime.Add(TimeSpan.FromMinutes(durationMinutes));
+
                 slots.Add(new TimeSlot
                 {
-                    StartTime = currentTime,
-                    EndTime = currentTime.Add(TimeSpan.FromMinutes(durationMinutes)),
+                    StartTime = NormalizeTimeSpan(currentTime),
+                    EndTime = NormalizeTimeSpan(endTime),
                     IsAvailable = true
                 });
 
@@ -223,6 +225,19 @@ namespace DMS.Api.Controllers
             }
 
             return slots;
+        }
+
+        /// <summary>
+        /// Normalize TimeSpan to 24-hour cycle (0-23:59:59)
+        /// </summary>
+        private TimeSpan NormalizeTimeSpan(TimeSpan time)
+        {
+            int totalHours = (int)time.TotalHours;
+            int normalizedHours = totalHours % 24;
+            int minutes = time.Minutes;
+            int seconds = time.Seconds;
+
+            return new TimeSpan(normalizedHours, minutes, seconds);
         }
 
         #endregion
