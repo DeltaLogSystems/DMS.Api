@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class DiscardRequestsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -20,6 +22,7 @@ namespace DMS.Api.DL
             int? centerId = null,
             string? requestStatus = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT dr.*, 
                                     ii.IndividualItemCode, ii.CurrentUsageCount,
                                     i.ItemCode, i.ItemName, i.MinimumUsageCount,
@@ -48,7 +51,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY dr.RequestedDate DESC";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -56,6 +59,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPendingRequestsAsync(int? centerId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             return await GetAllRequestsAsync(centerId, "Pending");
         }
 
@@ -72,12 +76,13 @@ namespace DMS.Api.DL
             string reason,
             int requestedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
-                // Get item details
-                var dtItem = await IndividualItemsDL.GetIndividualItemByIdAsync(individualItemId);
+                // Get item details (use transaction-aware internal overload)
+                var dtItem = await IndividualItemsDL.GetIndividualItemByIdAsync(sqlHelper, individualItemId);
                 if (dtItem.Rows.Count == 0)
                 {
                     throw new Exception("Individual item not found");
@@ -90,12 +95,12 @@ namespace DMS.Api.DL
                 int minimumUsageCount = Convert.ToInt32(row["MinimumUsageCount"]);
 
                 // Insert request
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Inventory_Discard_Requests 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Inventory_Discard_Requests
                       (IndividualItemID, InventoryItemID, CenterID, RequestType,
                        CurrentUsageCount, MinimumUsageCount, Reason, RequestStatus,
                        RequestedBy, RequestedDate)
-                      VALUES 
+                      VALUES
                       (@individualItemId, @inventoryItemId, @centerId, @requestType,
                        @currentUsageCount, @minimumUsageCount, @reason, 'Pending',
                        @requestedBy, NOW());
@@ -110,15 +115,15 @@ namespace DMS.Api.DL
                     "@requestedBy", requestedBy
                 );
 
-                // Update item status to DiscardRequested
-                await IndividualItemsDL.UpdateItemStatusAsync(individualItemId, "DiscardRequested");
+                // Update item status to DiscardRequested (use transaction-aware internal overload)
+                await IndividualItemsDL.UpdateItemStatusAsync(sqlHelper, individualItemId, "DiscardRequested");
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(result);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -136,12 +141,13 @@ namespace DMS.Api.DL
             string? reviewComments,
             int reviewedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get request details
-                var dtRequest = await _sqlHelper.ExecDataTableAsync(
+                var dtRequest = await sqlHelper.ExecDataTableAsync(
                     "SELECT IndividualItemID FROM T_Inventory_Discard_Requests WHERE RequestID = @requestId",
                     "@requestId", requestId
                 );
@@ -154,7 +160,7 @@ namespace DMS.Api.DL
                 int individualItemId = Convert.ToInt32(dtRequest.Rows[0]["IndividualItemID"]);
 
                 // Update request status
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE T_Inventory_Discard_Requests 
                       SET RequestStatus = @status,
                           ReviewedBy = @reviewedBy,
@@ -167,23 +173,23 @@ namespace DMS.Api.DL
                     "@reviewComments", reviewComments ?? (object)DBNull.Value
                 );
 
-                // Update individual item status
+                // Update individual item status (use transaction-aware internal overloads)
                 if (isApproved)
                 {
-                    await IndividualItemsDL.DiscardItemAsync(individualItemId, "Approved discard request");
+                    await IndividualItemsDL.DiscardItemAsync(sqlHelper, individualItemId, "Approved discard request");
                 }
                 else
                 {
                     // Revert to previous status
-                    await IndividualItemsDL.UpdateItemStatusAsync(individualItemId, "Available");
+                    await IndividualItemsDL.UpdateItemStatusAsync(sqlHelper, individualItemId, "Available");
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return 1;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

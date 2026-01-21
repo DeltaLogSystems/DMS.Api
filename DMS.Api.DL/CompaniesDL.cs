@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class CompaniesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,7 +15,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<string> GetCompanyCodeAsync(int companyId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT CompanyCode FROM M_Companies WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -26,7 +29,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllCompaniesAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Companies ORDER BY CompanyName"
             );
             return dt;
@@ -37,7 +41,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActiveCompaniesAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Companies WHERE IsActive = 1 ORDER BY CompanyName"
             );
             return dt;
@@ -48,7 +53,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyByIdAsync(int companyId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Companies WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -60,7 +66,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyByNameAsync(string companyName)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Companies WHERE CompanyName = @companyName",
                 "@companyName", companyName
             );
@@ -72,7 +79,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> SearchCompaniesByNameAsync(string searchTerm)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Companies WHERE CompanyName LIKE @searchTerm ORDER BY CompanyName",
                 "@searchTerm", $"%{searchTerm}%"
             );
@@ -84,6 +92,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> CompanyNameExistsAsync(string companyName, int? excludeCompanyId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeCompanyId.HasValue
                 ? "SELECT COUNT(*) FROM M_Companies WHERE CompanyName = @companyName AND CompanyID != @companyId"
                 : "SELECT COUNT(*) FROM M_Companies WHERE CompanyName = @companyName";
@@ -92,7 +101,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@companyName", companyName, "@companyId", excludeCompanyId.Value }
                 : new object[] { "@companyName", companyName };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -101,11 +110,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetCompanyCountAsync(bool activeOnly = false)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = activeOnly
                 ? "SELECT COUNT(*) FROM M_Companies WHERE IsActive = 1"
                 : "SELECT COUNT(*) FROM M_Companies";
 
-            var result = await _sqlHelper.ExecScalarAsync(query);
+            var result = await sqlHelper.ExecScalarAsync(query);
             return Convert.ToInt32(result);
         }
 
@@ -123,7 +133,8 @@ namespace DMS.Api.DL
             bool isActive,
             string createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Companies (CompanyName, CompanyAddress, CompanyLogo, IsActive, CreatedDate, CreatedBy)
                   VALUES (@companyName, @companyAddress, @companyLogo, @isActive, CURDATE(), @createdBy);
                   SELECT LAST_INSERT_ID();",
@@ -150,7 +161,8 @@ namespace DMS.Api.DL
             string companyLogo,
             bool isActive)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Companies 
                   SET CompanyName = @companyName,
                       CompanyAddress = @companyAddress,
@@ -171,7 +183,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleCompanyStatusAsync(int companyId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Companies SET IsActive = NOT IsActive WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -183,7 +196,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateCompanyLogoAsync(int companyId, string companyLogo)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Companies SET CompanyLogo = @companyLogo WHERE CompanyID = @companyId",
                 "@companyId", companyId,
                 "@companyLogo", companyLogo
@@ -200,7 +214,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> SoftDeleteCompanyAsync(int companyId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Companies SET IsActive = 0 WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -212,7 +227,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteCompanyAsync(int companyId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Companies WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -228,7 +244,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyByUserIdAsync(int userId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT c.* 
           FROM M_Companies c
           INNER JOIN M_Users u ON c.CompanyID = u.CompanyID
@@ -243,7 +260,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyByPatientIdAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT c.* 
           FROM M_Companies c
           INNER JOIN M_Patients p ON c.CompanyID = p.CompanyID

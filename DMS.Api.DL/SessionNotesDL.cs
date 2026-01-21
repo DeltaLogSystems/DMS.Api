@@ -132,8 +132,8 @@ namespace DMS.Api.DL
             {
                 await sqlHelper.BeginTransactionAsync();
 
-                // Get note type details
-                var dtNoteType = await SessionNoteTypesDL.GetNoteTypeByIdAsync(noteTypeId);
+                // Get note type details (use transaction-aware internal overload)
+                var dtNoteType = await SessionNoteTypesDL.GetNoteTypeByIdAsync(sqlHelper, noteTypeId);
                 if (dtNoteType.Rows.Count == 0)
                 {
                     throw new Exception("Note type not found");

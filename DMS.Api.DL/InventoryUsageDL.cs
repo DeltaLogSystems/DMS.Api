@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class InventoryUsageDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -24,6 +26,7 @@ namespace DMS.Api.DL
             DateTime? startDate = null,
             DateTime? endDate = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT u.*, 
                                     i.ItemCode, i.ItemName,
                                     ii.IndividualItemCode,
@@ -82,7 +85,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY u.UsageDate DESC";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -90,7 +93,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUsageByAppointmentAsync(int appointmentId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          i.ItemCode, i.ItemName,
                          ii.IndividualItemCode
@@ -122,15 +126,16 @@ namespace DMS.Api.DL
             string? notes,
             int usedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get usage number for individual items
                 int usageNumber = 1;
                 if (individualItemId.HasValue)
                 {
-                    var currentUsage = await _sqlHelper.ExecScalarAsync(
+                    var currentUsage = await sqlHelper.ExecScalarAsync(
                         "SELECT CurrentUsageCount FROM T_Inventory_Individual_Items WHERE IndividualItemID = @individualItemId",
                         "@individualItemId", individualItemId.Value
                     );
@@ -138,7 +143,7 @@ namespace DMS.Api.DL
                 }
 
                 // Insert usage record
-                var result = await _sqlHelper.ExecScalarAsync(
+                var result = await sqlHelper.ExecScalarAsync(
                     @"INSERT INTO T_Inventory_Usage 
                       (InventoryItemID, IndividualItemID, StockID, CenterID, AppointmentID, PatientID,
                        UsageDate, QuantityUsed, UsageNumber, ItemCondition, Notes, UsedBy)
@@ -159,23 +164,23 @@ namespace DMS.Api.DL
                     "@usedBy", usedBy
                 );
 
-                // Update individual item if applicable
+                // Update individual item if applicable (use transaction-aware internal overloads)
                 if (individualItemId.HasValue)
                 {
-                    await IndividualItemsDL.IncrementUsageCountAsync(individualItemId.Value);
+                    await IndividualItemsDL.IncrementUsageCountAsync(sqlHelper, individualItemId.Value);
                 }
                 else
                 {
                     // Deduct from stock for non-individual items
-                    await InventoryStockDL.DeductAvailableQuantityAsync(stockId, (int)quantityUsed);
+                    await InventoryStockDL.DeductAvailableQuantityAsync(sqlHelper, stockId, (int)quantityUsed);
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(result);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

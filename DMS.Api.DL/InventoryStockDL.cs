@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class InventoryStockDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -23,6 +25,7 @@ namespace DMS.Api.DL
             bool showNearExpiry = false,
             bool showLowStock = false)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT s.*, 
                                     i.ItemCode, i.ItemName, i.UnitOfMeasure, i.ReorderLevel,
                                     c.CenterName,
@@ -66,7 +69,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY s.ExpiryDate, i.ItemName";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -74,7 +77,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetStockByIdAsync(int stockId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT s.*, 
                          i.ItemCode, i.ItemName, i.UnitOfMeasure, 
                          i.IsIndividualQtyTracking, i.MaximumUsageCount,
@@ -94,7 +98,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetStockSummaryAsync(int centerId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT i.ItemCode, i.ItemName, i.UnitOfMeasure,
                          SUM(s.Quantity) as TotalQuantity,
                          SUM(s.AvailableQuantity) as TotalAvailable,
@@ -131,12 +136,13 @@ namespace DMS.Api.DL
             int quantity,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Insert stock
-                var result = await _sqlHelper.ExecScalarAsync(
+                var result = await sqlHelper.ExecScalarAsync(
                     @"INSERT INTO T_Inventory_Stock 
                       (InventoryItemID, CenterID, CompanyID, BatchNumber, ManufactureDate,
                        ExpiryDate, PurchaseDate, PurchaseCost, Quantity, AvailableQuantity,
@@ -161,7 +167,7 @@ namespace DMS.Api.DL
                 int stockId = Convert.ToInt32(result);
 
                 // Check if item requires individual tracking
-                var dtItem = await _sqlHelper.ExecDataTableAsync(
+                var dtItem = await sqlHelper.ExecDataTableAsync(
                     "SELECT IsIndividualQtyTracking, MaximumUsageCount FROM M_Inventory_Items WHERE InventoryItemID = @inventoryItemId",
                     "@inventoryItemId", inventoryItemId
                 );
@@ -173,9 +179,9 @@ namespace DMS.Api.DL
                     // Create individual items for each quantity
                     for (int i = 1; i <= quantity; i++)
                     {
-                        string individualCode = await GenerateIndividualItemCodeAsync(inventoryItemId, centerId);
+                        string individualCode = await GenerateIndividualItemCodeAsync(sqlHelper, inventoryItemId, centerId);
 
-                        await _sqlHelper.ExecNonQueryAsync(
+                        await sqlHelper.ExecNonQueryAsync(
                             @"INSERT INTO T_Inventory_Individual_Items 
                               (StockID, InventoryItemID, CenterID, IndividualItemCode, 
                                MaxUsageCount, CurrentUsageCount, ItemStatus, IsAvailable,
@@ -194,12 +200,12 @@ namespace DMS.Api.DL
                     }
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return stockId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -207,10 +213,10 @@ namespace DMS.Api.DL
         /// <summary>
         /// Generate individual item code
         /// </summary>
-        private static async Task<string> GenerateIndividualItemCodeAsync(int inventoryItemId, int centerId)
+        private static async Task<string> GenerateIndividualItemCodeAsync(MySQLHelper sqlHelper, int inventoryItemId, int centerId)
         {
             // Get item code
-            var dtItem = await _sqlHelper.ExecDataTableAsync(
+            var dtItem = await sqlHelper.ExecDataTableAsync(
                 "SELECT ItemCode FROM M_Inventory_Items WHERE InventoryItemID = @inventoryItemId",
                 "@inventoryItemId", inventoryItemId
             );
@@ -220,10 +226,10 @@ namespace DMS.Api.DL
                 : "ITM";
 
             // Get last number
-            var lastNumber = await _sqlHelper.ExecScalarAsync(
-                @"SELECT MAX(CAST(SUBSTRING(IndividualItemCode, LENGTH(@prefix) + 2) AS UNSIGNED)) 
-                  FROM T_Inventory_Individual_Items 
-                  WHERE InventoryItemID = @inventoryItemId 
+            var lastNumber = await sqlHelper.ExecScalarAsync(
+                @"SELECT MAX(CAST(SUBSTRING(IndividualItemCode, LENGTH(@prefix) + 2) AS UNSIGNED))
+                  FROM T_Inventory_Individual_Items
+                  WHERE InventoryItemID = @inventoryItemId
                   AND CenterID = @centerId
                   AND IndividualItemCode LIKE CONCAT(@prefix, '-%')",
                 "@inventoryItemId", inventoryItemId,
@@ -248,7 +254,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateStockQuantityAsync(int stockId, int quantityChange)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE T_Inventory_Stock 
                   SET Quantity = Quantity + @quantityChange,
                       AvailableQuantity = AvailableQuantity + @quantityChange
@@ -263,8 +270,17 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeductAvailableQuantityAsync(int stockId, int quantity)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Inventory_Stock 
+            using var sqlHelper = new MySQLHelper();
+            return await DeductAvailableQuantityAsync(sqlHelper, stockId, quantity);
+        }
+
+        /// <summary>
+        /// Deduct available quantity (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<int> DeductAvailableQuantityAsync(MySQLHelper sqlHelper, int stockId, int quantity)
+        {
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Inventory_Stock
                   SET AvailableQuantity = AvailableQuantity - @quantity
                   WHERE StockID = @stockId
                   AND AvailableQuantity >= @quantity",

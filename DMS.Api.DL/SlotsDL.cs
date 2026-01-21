@@ -9,14 +9,17 @@ namespace DMS.Api.DL
 {
     public static class SlotsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         /// <summary>
         /// Get center configuration for slot calculation
         /// </summary>
         public static async Task<DataTable> GetCenterConfigurationAsync(int centerId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT CenterOpenTime, CenterCloseTime, SlotDuration, 
                          MachineSessionHours, IsFixedHoursForSession
                   FROM L_Center_Configuration
@@ -31,7 +34,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAvailableSlotsAsync(int centerId, DateTime date)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT SlotStartTime, SlotEndTime, 
                          a.AppointmentID, p.PatientName, p.PatientCode
                   FROM T_Slots s

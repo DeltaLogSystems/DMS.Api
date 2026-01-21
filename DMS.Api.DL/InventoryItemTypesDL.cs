@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class InventoryItemTypesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -18,11 +20,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllItemTypesAsync(bool activeOnly = true)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = activeOnly
                 ? "SELECT * FROM M_Inventory_Item_Types WHERE IsActive = 1 ORDER BY ItemTypeName"
                 : "SELECT * FROM M_Inventory_Item_Types ORDER BY ItemTypeName";
 
-            return await _sqlHelper.ExecDataTableAsync(query);
+            return await sqlHelper.ExecDataTableAsync(query);
         }
 
         /// <summary>
@@ -30,7 +33,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetItemTypeByIdAsync(int itemTypeId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Inventory_Item_Types WHERE ItemTypeID = @itemTypeId",
                 "@itemTypeId", itemTypeId
             );
@@ -49,7 +53,8 @@ namespace DMS.Api.DL
             string? description,
             int createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Inventory_Item_Types 
                   (ItemTypeName, ItemTypeCode, Description, IsActive, CreatedDate, CreatedBy)
                   VALUES 
@@ -77,7 +82,8 @@ namespace DMS.Api.DL
             string? description,
             int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Inventory_Item_Types 
                   SET ItemTypeName = @itemTypeName,
                       Description = @description,
@@ -96,7 +102,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleItemTypeStatusAsync(int itemTypeId, bool isActive, int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Inventory_Item_Types 
                   SET IsActive = @isActive,
                       ModifiedDate = NOW(),
@@ -117,8 +124,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteItemTypeAsync(int itemTypeId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Check if any items exist with this type
-            var count = await _sqlHelper.ExecScalarAsync(
+            var count = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Inventory_Items WHERE ItemTypeID = @itemTypeId",
                 "@itemTypeId", itemTypeId
             );
@@ -128,7 +136,7 @@ namespace DMS.Api.DL
                 throw new InvalidOperationException("Cannot delete item type with existing inventory items");
             }
 
-            return await _sqlHelper.ExecNonQueryAsync(
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Inventory_Item_Types WHERE ItemTypeID = @itemTypeId",
                 "@itemTypeId", itemTypeId
             );
