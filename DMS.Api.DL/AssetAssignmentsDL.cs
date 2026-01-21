@@ -141,11 +141,19 @@ namespace DMS.Api.DL
         #region UPDATE Operations
 
         /// <summary>
-        /// Update assignment status
+        /// Update assignment status (public method for standalone calls)
         /// </summary>
         public static async Task<int> UpdateAssignmentStatusAsync(int assignmentId, string status)
         {
             using var sqlHelper = new MySQLHelper();
+            return await UpdateAssignmentStatusAsync(sqlHelper, assignmentId, status);
+        }
+
+        /// <summary>
+        /// Update assignment status (internal method for use within transactions)
+        /// </summary>
+        internal static async Task<int> UpdateAssignmentStatusAsync(MySQLHelper sqlHelper, int assignmentId, string status)
+        {
             return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE T_Asset_Assignments
                   SET Status = @status
