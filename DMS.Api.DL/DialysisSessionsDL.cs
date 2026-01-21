@@ -236,8 +236,8 @@ namespace DMS.Api.DL
 
                 int sessionId = Convert.ToInt32(result);
 
-                // Update appointment status
-                await AppointmentsDL.UpdateAppointmentStatusAsync(appointmentId, 2, createdBy); // Status 2 = In Progress
+                // Update appointment status (use internal overload to share transaction)
+                await AppointmentsDL.UpdateAppointmentStatusAsync(sqlHelper, appointmentId, 2, createdBy); // Status 2 = In Progress
 
                 // Log timeline event
                 await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionCreated", "Dialysis session created", createdBy);
@@ -377,14 +377,14 @@ namespace DMS.Api.DL
                     "@completedBy", completedBy
                 );
 
-                // Update appointment status to Completed
-                await AppointmentsDL.UpdateAppointmentStatusAsync(appointmentId, 3, completedBy); // Status 3 = Completed
+                // Update appointment status to Completed (use internal overload to share transaction)
+                await AppointmentsDL.UpdateAppointmentStatusAsync(sqlHelper, appointmentId, 3, completedBy); // Status 3 = Completed
 
-                // Complete asset assignment
+                // Complete asset assignment (use internal overload to share transaction)
                 var assetAssignmentId = dtSession.Rows[0]["AssetAssignmentID"];
                 if (assetAssignmentId != DBNull.Value)
                 {
-                    await AssetAssignmentsDL.UpdateAssignmentStatusAsync(Convert.ToInt32(assetAssignmentId), "Completed");
+                    await AssetAssignmentsDL.UpdateAssignmentStatusAsync(sqlHelper, Convert.ToInt32(assetAssignmentId), "Completed");
                 }
 
                 // Log timeline event
@@ -437,14 +437,14 @@ namespace DMS.Api.DL
                     "@completedBy", completedBy
                 );
 
-                // Update appointment status
-                await AppointmentsDL.UpdateAppointmentStatusAsync(appointmentId, 6, completedBy); // Status 6 = Terminated
+                // Update appointment status (use internal overload to share transaction)
+                await AppointmentsDL.UpdateAppointmentStatusAsync(sqlHelper, appointmentId, 6, completedBy); // Status 6 = Terminated
 
-                // Complete asset assignment
+                // Complete asset assignment (use internal overload to share transaction)
                 var assetAssignmentId = dtSession.Rows[0]["AssetAssignmentID"];
                 if (assetAssignmentId != DBNull.Value)
                 {
-                    await AssetAssignmentsDL.UpdateAssignmentStatusAsync(Convert.ToInt32(assetAssignmentId), "Completed");
+                    await AssetAssignmentsDL.UpdateAssignmentStatusAsync(sqlHelper, Convert.ToInt32(assetAssignmentId), "Completed");
                 }
 
                 // Log timeline event

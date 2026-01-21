@@ -331,11 +331,19 @@ namespace DMS.Api.DL
         #region UPDATE Operations
 
         /// <summary>
-        /// Update appointment status
+        /// Update appointment status (public method for standalone calls)
         /// </summary>
         public static async Task<int> UpdateAppointmentStatusAsync(int appointmentId, int newStatus, int modifiedBy)
         {
             using var sqlHelper = new MySQLHelper();
+            return await UpdateAppointmentStatusAsync(sqlHelper, appointmentId, newStatus, modifiedBy);
+        }
+
+        /// <summary>
+        /// Update appointment status (internal method for use within transactions)
+        /// </summary>
+        internal static async Task<int> UpdateAppointmentStatusAsync(MySQLHelper sqlHelper, int appointmentId, int newStatus, int modifiedBy)
+        {
             var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE T_Appointments
                   SET AppointmentStatus = @newStatus,
