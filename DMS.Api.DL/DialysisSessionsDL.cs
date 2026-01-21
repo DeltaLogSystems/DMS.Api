@@ -465,9 +465,9 @@ namespace DMS.Api.DL
         #region Timeline Operations
 
         /// <summary>
-        /// Insert timeline event (private helper for use within transactions)
+        /// Insert timeline event (internal helper for use within transactions)
         /// </summary>
-        private static async Task<int> InsertTimelineEventAsync(
+        internal static async Task<int> InsertTimelineEventAsync(
             MySQLHelper sqlHelper,
             int sessionId,
             string eventType,

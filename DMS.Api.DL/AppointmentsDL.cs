@@ -9,7 +9,8 @@ namespace DMS.Api.DL
 {
     public static class AppointmentsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region Validation Methods
 
@@ -18,22 +19,23 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> PatientHasAppointmentOnDateAsync(int patientId, DateTime appointmentDate, int? excludeAppointmentId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeAppointmentId.HasValue
-                ? @"SELECT COUNT(*) FROM T_Appointments 
-                    WHERE PatientID = @patientId 
-                    AND AppointmentDate = @appointmentDate 
+                ? @"SELECT COUNT(*) FROM T_Appointments
+                    WHERE PatientID = @patientId
+                    AND AppointmentDate = @appointmentDate
                     AND AppointmentStatus NOT IN (5, 6)
                     AND AppointmentID != @appointmentId"
-                : @"SELECT COUNT(*) FROM T_Appointments 
-                    WHERE PatientID = @patientId 
-                    AND AppointmentDate = @appointmentDate 
+                : @"SELECT COUNT(*) FROM T_Appointments
+                    WHERE PatientID = @patientId
+                    AND AppointmentDate = @appointmentDate
                     AND AppointmentStatus NOT IN (5, 6)";
 
             object[] parameters = excludeAppointmentId.HasValue
                 ? new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date, "@appointmentId", excludeAppointmentId.Value }
                 : new object[] { "@patientId", patientId, "@appointmentDate", appointmentDate.Date };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -42,10 +44,11 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> IsSlotAvailableAsync(int centerId, DateTime slotDate, TimeSpan startTime, TimeSpan endTime, int? excludeAppointmentId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeAppointmentId.HasValue
-                ? @"SELECT COUNT(*) FROM T_Slots 
-                    WHERE CenterID = @centerId 
-                    AND SlotDate = @slotDate 
+                ? @"SELECT COUNT(*) FROM T_Slots
+                    WHERE CenterID = @centerId
+                    AND SlotDate = @slotDate
                     AND IsActive = 1
                     AND AppointmentID != @appointmentId
                     AND (
@@ -53,9 +56,9 @@ namespace DMS.Api.DL
                         OR (@endTime > SlotStartTime AND @endTime <= SlotEndTime)
                         OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
                     )"
-                : @"SELECT COUNT(*) FROM T_Slots 
-                    WHERE CenterID = @centerId 
-                    AND SlotDate = @slotDate 
+                : @"SELECT COUNT(*) FROM T_Slots
+                    WHERE CenterID = @centerId
+                    AND SlotDate = @slotDate
                     AND IsActive = 1
                     AND (
                         (@startTime >= SlotStartTime AND @startTime < SlotEndTime)
@@ -67,7 +70,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime, "@appointmentId", excludeAppointmentId.Value }
                 : new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) == 0;
         }
 
@@ -76,8 +79,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetBookedSlotsAsync(int centerId, DateTime date)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT s.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT s.*,
                          a.AppointmentID, a.AppointmentStatus,
                          p.PatientName, p.PatientCode,
                          st.StatusName, st.StatusColor
@@ -85,7 +89,7 @@ namespace DMS.Api.DL
                   INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
                   INNER JOIN M_Patients p ON s.PatientID = p.PatientID
                   INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
-                  WHERE s.CenterID = @centerId 
+                  WHERE s.CenterID = @centerId
                   AND s.SlotDate = @date
                   AND s.IsActive = 1
                   AND a.AppointmentStatus NOT IN (5, 6)
@@ -105,8 +109,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllAppointmentsAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*,
                          p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
                          c.CenterName,
                          comp.CompanyName,
@@ -126,8 +131,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAppointmentByIdAsync(int appointmentId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*,
                          p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
                          c.CenterName,
                          comp.CompanyName,
@@ -148,9 +154,10 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSlotsByAppointmentIdAsync(int appointmentId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT * FROM T_Slots 
-                  WHERE AppointmentID = @appointmentId 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT * FROM T_Slots
+                  WHERE AppointmentID = @appointmentId
                   AND IsActive = 1
                   ORDER BY SlotStartTime",
                 "@appointmentId", appointmentId
@@ -163,8 +170,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAppointmentsByPatientIdAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*,
                          p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
                          c.CenterName,
                          comp.CompanyName,
@@ -186,8 +194,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAppointmentsByCenterAndDateAsync(int centerId, DateTime date)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*,
                          p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
                          c.CenterName,
                          comp.CompanyName,
@@ -197,7 +206,7 @@ namespace DMS.Api.DL
                   INNER JOIN M_Centers c ON a.CenterID = c.CenterID
                   INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
                   INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
-                  WHERE a.CenterID = @centerId 
+                  WHERE a.CenterID = @centerId
                   AND a.AppointmentDate = @date
                   ORDER BY a.AppointmentID DESC",
                 "@centerId", centerId,
@@ -211,8 +220,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAppointmentsByDateRangeAsync(int centerId, DateTime startDate, DateTime endDate)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
-                @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
+                @"SELECT a.*,
                          p.PatientCode, p.PatientName, p.MobileNo as PatientMobile,
                          c.CenterName,
                          comp.CompanyName,
@@ -222,7 +232,7 @@ namespace DMS.Api.DL
                   INNER JOIN M_Centers c ON a.CenterID = c.CenterID
                   INNER JOIN M_Companies comp ON a.CompanyID = comp.CompanyID
                   INNER JOIN M_AppointmentStatus st ON a.AppointmentStatus = st.StatusID
-                  WHERE a.CenterID = @centerId 
+                  WHERE a.CenterID = @centerId
                   AND a.AppointmentDate BETWEEN @startDate AND @endDate
                   ORDER BY a.AppointmentDate, a.AppointmentID",
                 "@centerId", centerId,
@@ -237,6 +247,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetAppointmentCountByPatientAsync(int patientId, int? statusFilter = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = statusFilter.HasValue
                 ? "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = @status"
                 : "SELECT COUNT(*) FROM T_Appointments WHERE PatientID = @patientId AND AppointmentStatus = 4"; // Completed only
@@ -245,7 +256,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@patientId", patientId, "@status", statusFilter.Value }
                 : new object[] { "@patientId", patientId };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result);
         }
 
@@ -265,16 +276,17 @@ namespace DMS.Api.DL
             TimeSpan slotEndTime,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Insert appointment
-                var appointmentId = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Appointments 
-                      (PatientID, CenterID, CompanyID, AppointmentStatus, AppointmentDate, 
+                var appointmentId = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Appointments
+                      (PatientID, CenterID, CompanyID, AppointmentStatus, AppointmentDate,
                        CreatedBy, CreatedDate, IsRescheduled, RescheduleRevision)
-                      VALUES 
+                      VALUES
                       (@patientId, @centerId, @companyId, 1, @appointmentDate,
                        @createdBy, NOW(), 0, 0);
                       SELECT LAST_INSERT_ID();",
@@ -288,11 +300,11 @@ namespace DMS.Api.DL
                 int newAppointmentId = Convert.ToInt32(appointmentId);
 
                 // Insert slot
-                await _sqlHelper.ExecNonQueryAsync(
-                    @"INSERT INTO T_Slots 
-                      (AppointmentID, PatientID, CenterID, CompanyID, 
+                await sqlHelper.ExecNonQueryAsync(
+                    @"INSERT INTO T_Slots
+                      (AppointmentID, PatientID, CenterID, CompanyID,
                        SlotStartTime, SlotEndTime, SlotDate, IsActive)
-                      VALUES 
+                      VALUES
                       (@appointmentId, @patientId, @centerId, @companyId,
                        @slotStartTime, @slotEndTime, @slotDate, 1)",
                     "@appointmentId", newAppointmentId,
@@ -304,12 +316,12 @@ namespace DMS.Api.DL
                     "@slotDate", appointmentDate.Date
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return newAppointmentId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -323,8 +335,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateAppointmentStatusAsync(int appointmentId, int newStatus, int modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Appointments 
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Appointments
                   SET AppointmentStatus = @newStatus,
                       ModifiedBy = @modifiedBy,
                       ModifiedDate = NOW()
@@ -347,12 +360,13 @@ namespace DMS.Api.DL
             string rescheduleReason,
             int modifiedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get current appointment details
-                var dtAppointment = await _sqlHelper.ExecDataTableAsync(
+                var dtAppointment = await sqlHelper.ExecDataTableAsync(
                     "SELECT RescheduleRevision FROM T_Appointments WHERE AppointmentID = @appointmentId",
                     "@appointmentId", appointmentId
                 );
@@ -366,8 +380,8 @@ namespace DMS.Api.DL
                 int newRevision = currentRevision + 1;
 
                 // Update appointment
-                await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Appointments 
+                await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Appointments
                       SET AppointmentDate = @newAppointmentDate,
                           AppointmentStatus = 7,
                           IsRescheduled = 1,
@@ -384,13 +398,13 @@ namespace DMS.Api.DL
                 );
 
                 // Deactivate old slots
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     "UPDATE T_Slots SET IsActive = 0 WHERE AppointmentID = @appointmentId",
                     "@appointmentId", appointmentId
                 );
 
                 // Get appointment details for new slot
-                var dtDetails = await _sqlHelper.ExecDataTableAsync(
+                var dtDetails = await sqlHelper.ExecDataTableAsync(
                     "SELECT PatientID, CenterID, CompanyID FROM T_Appointments WHERE AppointmentID = @appointmentId",
                     "@appointmentId", appointmentId
                 );
@@ -401,11 +415,11 @@ namespace DMS.Api.DL
                 int companyId = Convert.ToInt32(row["CompanyID"]);
 
                 // Insert new slot
-                await _sqlHelper.ExecNonQueryAsync(
-                    @"INSERT INTO T_Slots 
-                      (AppointmentID, PatientID, CenterID, CompanyID, 
+                await sqlHelper.ExecNonQueryAsync(
+                    @"INSERT INTO T_Slots
+                      (AppointmentID, PatientID, CenterID, CompanyID,
                        SlotStartTime, SlotEndTime, SlotDate, IsActive)
-                      VALUES 
+                      VALUES
                       (@appointmentId, @patientId, @centerId, @companyId,
                        @slotStartTime, @slotEndTime, @slotDate, 1)",
                     "@appointmentId", appointmentId,
@@ -417,12 +431,12 @@ namespace DMS.Api.DL
                     "@slotDate", newAppointmentDate.Date
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return appointmentId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -432,14 +446,15 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdatePatientDialysisCyclesAsync(int patientId, DateTime appointmentDate)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get patient's current cycle info
-                var dtPatient = await _sqlHelper.ExecDataTableAsync(
-                    @"SELECT CurrentCycleStartDate, CurrentCycleEndDate 
-              FROM M_Patients 
+                var dtPatient = await sqlHelper.ExecDataTableAsync(
+                    @"SELECT CurrentCycleStartDate, CurrentCycleEndDate
+              FROM M_Patients
               WHERE PatientID = @patientId",
                     "@patientId", patientId
                 );
@@ -473,12 +488,12 @@ namespace DMS.Api.DL
                 // Update session count for current cycle
                 await PatientCyclesDL.UpdateCycleSessionCountAsync(patientId);
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return 1;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -493,13 +508,14 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> CancelAppointmentAsync(int appointmentId, int modifiedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Update appointment status to Cancelled (5)
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE T_Appointments 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Appointments
               SET AppointmentStatus = 5,
                   ModifiedBy = @modifiedBy,
                   ModifiedDate = NOW()
@@ -512,20 +528,20 @@ namespace DMS.Api.DL
                 {
                     // Deactivate all slots for this appointment
                     // This makes the time slots available for other patients
-                    await _sqlHelper.ExecNonQueryAsync(
-                        @"UPDATE T_Slots 
+                    await sqlHelper.ExecNonQueryAsync(
+                        @"UPDATE T_Slots
                   SET IsActive = 0
                   WHERE AppointmentID = @appointmentId",
                         "@appointmentId", appointmentId
                     );
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -536,28 +552,29 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteAppointmentAsync(int appointmentId)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Delete slots first (cascade)
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     "DELETE FROM T_Slots WHERE AppointmentID = @appointmentId",
                     "@appointmentId", appointmentId
                 );
 
                 // Delete appointment
-                var result = await _sqlHelper.ExecNonQueryAsync(
+                var result = await sqlHelper.ExecNonQueryAsync(
                     "DELETE FROM T_Appointments WHERE AppointmentID = @appointmentId",
                     "@appointmentId", appointmentId
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

@@ -4,7 +4,8 @@ namespace DMS.Api.DL
 {
     public static class AssetsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region Asset Code Generation
 
@@ -13,8 +14,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<string> GenerateAssetCodeAsync(int assetTypeId, int centerId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Get asset type code
-            var dtType = await _sqlHelper.ExecDataTableAsync(
+            var dtType = await sqlHelper.ExecDataTableAsync(
                 "SELECT AssetTypeCode FROM M_Asset_Types WHERE AssetTypeID = @assetTypeId",
                 "@assetTypeId", assetTypeId
             );
@@ -27,7 +29,7 @@ namespace DMS.Api.DL
             string typeCode = dtType.Rows[0]["AssetTypeCode"]?.ToString() ?? "AST";
 
             // Get center code (first 3 letters)
-            var dtCenter = await _sqlHelper.ExecDataTableAsync(
+            var dtCenter = await sqlHelper.ExecDataTableAsync(
                 "SELECT CenterName FROM M_Centers WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -37,9 +39,9 @@ namespace DMS.Api.DL
                 : "CTR";
 
             // Get last number
-            var lastNumber = await _sqlHelper.ExecScalarAsync(
-                @"SELECT MAX(CAST(SUBSTRING(AssetCode, -4) AS UNSIGNED)) 
-                  FROM M_Assets 
+            var lastNumber = await sqlHelper.ExecScalarAsync(
+                @"SELECT MAX(CAST(SUBSTRING(AssetCode, -4) AS UNSIGNED))
+                  FROM M_Assets
                   WHERE AssetType = @assetTypeId AND CenterID = @centerId",
                 "@assetTypeId", assetTypeId,
                 "@centerId", centerId
@@ -62,7 +64,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllAssetsAsync(int? centerId = null, bool? activeOnly = null)
         {
-            string query = @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            string query = @"SELECT a.*,
                                     at.AssetTypeName,
                                     c.CenterName,
                                     comp.CompanyName
@@ -90,7 +93,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY a.AssetCode";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -98,7 +101,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssetByIdAsync(int assetId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT a.*, 
                          at.AssetTypeName, at.RequiresMaintenance, at.MaintenanceIntervalDays,
                          c.CenterName,
@@ -117,7 +121,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssetsByTypeAsync(int assetTypeId, int? centerId = null, bool activeOnly = true)
         {
-            string query = @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            string query = @"SELECT a.*,
                                     at.AssetTypeName,
                                     c.CenterName,
                                     comp.CompanyName
@@ -143,7 +148,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY a.AssetCode";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -151,7 +156,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssetsByTypeNameAsync(string assetTypeName, int? centerId = null, bool activeOnly = true)
         {
-            string query = @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            string query = @"SELECT a.*,
                             at.AssetTypeName,
                             c.CenterName,
                             comp.CompanyName
@@ -177,7 +183,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY a.AssetCode";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
 
@@ -186,7 +192,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssetsRequiringMaintenanceAsync(int? centerId = null, int daysThreshold = 7)
         {
-            string query = @"SELECT a.*, 
+            using var sqlHelper = new MySQLHelper();
+            string query = @"SELECT a.*,
                                     at.AssetTypeName,
                                     c.CenterName,
                                     DATEDIFF(a.NextMaintenanceDate, CURDATE()) as DaysUntilMaintenance
@@ -208,7 +215,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY a.NextMaintenanceDate";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -221,7 +228,8 @@ namespace DMS.Api.DL
             TimeSpan startTime,
             TimeSpan endTime)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT a.*, at.AssetTypeName
                   FROM M_Assets a
                   INNER JOIN M_Asset_Types at ON a.AssetType = at.AssetTypeID
@@ -267,16 +275,17 @@ namespace DMS.Api.DL
             int companyId,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Generate asset code
                 string assetCode = await GenerateAssetCodeAsync(assetType, centerId);
 
                 // Calculate initial maintenance date if required
                 DateTime? nextMaintenanceDate = null;
-                var dtType = await _sqlHelper.ExecDataTableAsync(
+                var dtType = await sqlHelper.ExecDataTableAsync(
                     "SELECT RequiresMaintenance, MaintenanceIntervalDays FROM M_Asset_Types WHERE AssetTypeID = @assetTypeId",
                     "@assetTypeId", assetType
                 );
@@ -288,12 +297,12 @@ namespace DMS.Api.DL
                 }
 
                 // Insert asset
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO M_Assets 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO M_Assets
                       (AssetCode, AssetName, AssetType, SerialNo, ModelNo, Manufacturer,
                        PurchaseDate, PurchaseCost, WarrantyExpiryDate, CenterID, CompanyID,
                        NextMaintenanceDate, IsActive, CreatedDate, CreatedBy)
-                      VALUES 
+                      VALUES
                       (@assetCode, @assetName, @assetType, @serialNo, @modelNo, @manufacturer,
                        @purchaseDate, @purchaseCost, @warrantyExpiryDate, @centerId, @companyId,
                        @nextMaintenanceDate, 1, NOW(), @createdBy);
@@ -313,12 +322,12 @@ namespace DMS.Api.DL
                     "@createdBy", createdBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(result);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -341,7 +350,8 @@ namespace DMS.Api.DL
             DateTime? warrantyExpiryDate,
             int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Assets 
                   SET AssetName = @assetName,
                       SerialNo = @serialNo,
@@ -375,12 +385,13 @@ namespace DMS.Api.DL
             DateTime? expectedActiveDate,
             int modifiedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get current status
-                var dtCurrent = await _sqlHelper.ExecDataTableAsync(
+                var dtCurrent = await sqlHelper.ExecDataTableAsync(
                     "SELECT IsActive FROM M_Assets WHERE AssetID = @assetId",
                     "@assetId", assetId
                 );
@@ -393,8 +404,8 @@ namespace DMS.Api.DL
                 bool currentStatus = Convert.ToBoolean(dtCurrent.Rows[0]["IsActive"]);
 
                 // Update asset status
-                var result = await _sqlHelper.ExecNonQueryAsync(
-                    @"UPDATE M_Assets 
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE M_Assets
                       SET IsActive = @isActive,
                           InactiveReason = @reason,
                           InactiveDate = @inactiveDate,
@@ -413,10 +424,10 @@ namespace DMS.Api.DL
                 // Log status change in history
                 if (currentStatus != isActive)
                 {
-                    await _sqlHelper.ExecNonQueryAsync(
-                        @"INSERT INTO T_Asset_Status_History 
+                    await sqlHelper.ExecNonQueryAsync(
+                        @"INSERT INTO T_Asset_Status_History
                           (AssetID, PreviousStatus, NewStatus, Reason, ExpectedActiveDate, ChangedDate, ChangedBy)
-                          VALUES 
+                          VALUES
                           (@assetId, @previousStatus, @newStatus, @reason, @expectedActiveDate, NOW(), @changedBy)",
                         "@assetId", assetId,
                         "@previousStatus", currentStatus,
@@ -427,12 +438,12 @@ namespace DMS.Api.DL
                     );
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -446,12 +457,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteAssetAsync(int assetId)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Check if asset has any assignments
-                var assignmentCount = await _sqlHelper.ExecScalarAsync(
+                var assignmentCount = await sqlHelper.ExecScalarAsync(
                     "SELECT COUNT(*) FROM T_Asset_Assignments WHERE AssetID = @assetId",
                     "@assetId", assetId
                 );
@@ -462,29 +474,29 @@ namespace DMS.Api.DL
                 }
 
                 // Delete maintenance history
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     "DELETE FROM T_Asset_Maintenance WHERE AssetID = @assetId",
                     "@assetId", assetId
                 );
 
                 // Delete status history
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     "DELETE FROM T_Asset_Status_History WHERE AssetID = @assetId",
                     "@assetId", assetId
                 );
 
                 // Delete asset
-                var result = await _sqlHelper.ExecNonQueryAsync(
+                var result = await sqlHelper.ExecNonQueryAsync(
                     "DELETE FROM M_Assets WHERE AssetID = @assetId",
                     "@assetId", assetId
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return result;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

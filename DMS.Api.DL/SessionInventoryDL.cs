@@ -9,7 +9,8 @@ namespace DMS.Api.DL
 {
     public static class SessionInventoryDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -18,8 +19,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionInventoryAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT si.*, 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT si.*,
                          ii.ItemCode, ii.ItemName, ii.UnitOfMeasure,
                          iti.IndividualItemCode, iti.CurrentUsageCount, iti.MaxUsageCount,
                          s.BatchNumber, s.ExpiryDate
@@ -38,8 +40,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> IsItemAlreadySelectedAsync(int sessionId, int inventoryItemId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
-                @"SELECT COUNT(*) FROM T_Session_Inventory 
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
+                @"SELECT COUNT(*) FROM T_Session_Inventory
                   WHERE SessionID = @sessionId AND InventoryItemID = @inventoryItemId",
                 "@sessionId", sessionId,
                 "@inventoryItemId", inventoryItemId
@@ -55,9 +58,6 @@ namespace DMS.Api.DL
         /// <summary>
         /// Add inventory item to session
         /// </summary>
-        /// <summary>
-        /// Add inventory item to session
-        /// </summary>
         public static async Task<int> AddInventoryToSessionAsync(
             int sessionId,
             int inventoryItemId,
@@ -69,16 +69,17 @@ namespace DMS.Api.DL
             string? notes,
             int selectedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Insert into session inventory
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Session_Inventory 
-              (SessionID, InventoryItemID, IndividualItemID, StockID, 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Session_Inventory
+              (SessionID, InventoryItemID, IndividualItemID, StockID,
                QuantityUsed, ItemCondition, UsageNumber, Notes, SelectedAt, SelectedBy)
-              VALUES 
+              VALUES
               (@sessionId, @inventoryItemId, @individualItemId, @stockId,
                @quantityUsed, @itemCondition, @usageNumber, @notes, NOW(), @selectedBy);
               SELECT LAST_INSERT_ID();",
@@ -99,20 +100,21 @@ namespace DMS.Api.DL
                 var dtItem = await InventoryItemsDL.GetItemByIdAsync(inventoryItemId);
                 string itemName = dtItem.Rows.Count > 0 ? dtItem.Rows[0]["ItemName"]?.ToString() ?? "" : "";
 
-                // Log timeline event - NOW PUBLIC
+                // Log timeline event
                 await DialysisSessionsDL.InsertTimelineEventAsync(
+                    sqlHelper,
                     sessionId,
                     "InventoryAdded",
                     $"Item added: {itemName} (Qty: {quantityUsed})",
                     selectedBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return sessionInventoryId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -127,7 +129,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> RemoveInventoryFromSessionAsync(int sessionInventoryId)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM T_Session_Inventory WHERE SessionInventoryID = @sessionInventoryId",
                 "@sessionInventoryId", sessionInventoryId
             );

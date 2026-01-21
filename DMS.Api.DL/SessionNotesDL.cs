@@ -9,7 +9,8 @@ namespace DMS.Api.DL
 {
     public static class SessionNotesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -18,9 +19,10 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionNotesAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT sn.*, 
-                         nt.NoteTypeName, nt.NoteTypeCode, nt.UnitOfMeasure, 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT sn.*,
+                         nt.NoteTypeName, nt.NoteTypeCode, nt.UnitOfMeasure,
                          nt.IsMandatory, nt.IsNumeric, nt.MinimumValue, nt.MaximumValue,
                          nt.Category
                   FROM T_Session_Notes sn
@@ -36,17 +38,18 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetLatestSessionNotesAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT sn.*, 
-                         nt.NoteTypeName, nt.NoteTypeCode, nt.UnitOfMeasure, 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT sn.*,
+                         nt.NoteTypeName, nt.NoteTypeCode, nt.UnitOfMeasure,
                          nt.Category
                   FROM T_Session_Notes sn
                   INNER JOIN M_Session_Note_Types nt ON sn.NoteTypeID = nt.NoteTypeID
                   WHERE sn.SessionID = @sessionId
                     AND sn.SessionNoteID IN (
-                      SELECT MAX(SessionNoteID) 
-                      FROM T_Session_Notes 
-                      WHERE SessionID = @sessionId 
+                      SELECT MAX(SessionNoteID)
+                      FROM T_Session_Notes
+                      WHERE SessionID = @sessionId
                       GROUP BY NoteTypeID
                     )
                   ORDER BY nt.DisplayOrder",
@@ -59,7 +62,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetNotesByTypeAsync(int sessionId, int noteTypeId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT sn.*, nt.NoteTypeName, nt.UnitOfMeasure
                   FROM T_Session_Notes sn
                   INNER JOIN M_Session_Note_Types nt ON sn.NoteTypeID = nt.NoteTypeID
@@ -75,12 +79,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> AreAllMandatoryNotesRecordedAsync(int sessionId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
-                @"SELECT COUNT(*) 
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
+                @"SELECT COUNT(*)
                   FROM M_Session_Note_Types nt
                   WHERE nt.IsMandatory = 1 AND nt.IsActive = 1
                     AND NOT EXISTS (
-                      SELECT 1 FROM T_Session_Notes sn 
+                      SELECT 1 FROM T_Session_Notes sn
                       WHERE sn.SessionID = @sessionId AND sn.NoteTypeID = nt.NoteTypeID
                     )",
                 "@sessionId", sessionId
@@ -94,12 +99,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetMissingMandatoryNotesAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT nt.* 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT nt.*
                   FROM M_Session_Note_Types nt
                   WHERE nt.IsMandatory = 1 AND nt.IsActive = 1
                     AND NOT EXISTS (
-                      SELECT 1 FROM T_Session_Notes sn 
+                      SELECT 1 FROM T_Session_Notes sn
                       WHERE sn.SessionID = @sessionId AND sn.NoteTypeID = nt.NoteTypeID
                     )
                   ORDER BY nt.DisplayOrder",
@@ -121,9 +127,10 @@ namespace DMS.Api.DL
             int recordedBy,
             string? additionalNotes = null)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get note type details
                 var dtNoteType = await SessionNoteTypesDL.GetNoteTypeByIdAsync(noteTypeId);
@@ -159,10 +166,10 @@ namespace DMS.Api.DL
                 }
 
                 // Insert note
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Session_Notes 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Session_Notes
               (SessionID, NoteTypeID, NoteValue, NoteTime, IsAbnormal, AlertGenerated, RecordedBy, Notes)
-              VALUES 
+              VALUES
               (@sessionId, @noteTypeId, @noteValue, NOW(), @isAbnormal, @alertGenerated, @recordedBy, @notes);
               SELECT LAST_INSERT_ID();",
                     "@sessionId", sessionId,
@@ -183,24 +190,25 @@ namespace DMS.Api.DL
                     ? $"{noteValue} {unitOfMeasure}"
                     : noteValue;
 
-                // Log timeline event - NOW PUBLIC
+                // Log timeline event
                 string eventDescription = isAbnormal
                     ? $"⚠️ {noteTypeName}: {displayValue} (Abnormal)"
                     : $"{noteTypeName}: {displayValue}";
 
                 await DialysisSessionsDL.InsertTimelineEventAsync(
+                    sqlHelper,
                     sessionId,
                     "NoteAdded",
                     eventDescription,
                     recordedBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return sessionNoteId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

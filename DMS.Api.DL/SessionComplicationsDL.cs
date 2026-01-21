@@ -9,7 +9,8 @@ namespace DMS.Api.DL
 {
     public static class SessionComplicationsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -18,9 +19,10 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSessionComplicationsAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT * FROM T_Session_Complications 
-                  WHERE SessionID = @sessionId 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT * FROM T_Session_Complications
+                  WHERE SessionID = @sessionId
                   ORDER BY OccurredAt DESC",
                 "@sessionId", sessionId
             );
@@ -31,8 +33,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUnresolvedComplicationsAsync(int sessionId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT * FROM T_Session_Complications 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT * FROM T_Session_Complications
                   WHERE SessionID = @sessionId AND ResolvedAt IS NULL
                   ORDER BY OccurredAt DESC",
                 "@sessionId", sessionId
@@ -54,14 +57,15 @@ namespace DMS.Api.DL
             string? actionTaken,
             int reportedBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
-                var result = await _sqlHelper.ExecScalarAsync(
-                    @"INSERT INTO T_Session_Complications 
+                var result = await sqlHelper.ExecScalarAsync(
+                    @"INSERT INTO T_Session_Complications
               (SessionID, ComplicationType, Severity, OccurredAt, Description, ActionTaken, ReportedBy)
-              VALUES 
+              VALUES
               (@sessionId, @complicationType, @severity, NOW(), @description, @actionTaken, @reportedBy);
               SELECT LAST_INSERT_ID();",
                     "@sessionId", sessionId,
@@ -74,24 +78,25 @@ namespace DMS.Api.DL
 
                 int complicationId = Convert.ToInt32(result);
 
-                // Log timeline event - NOW PUBLIC
+                // Log timeline event
                 string eventDescription = !string.IsNullOrEmpty(severity)
                     ? $"⚠️ Complication: {complicationType} ({severity})"
                     : $"⚠️ Complication: {complicationType}";
 
                 await DialysisSessionsDL.InsertTimelineEventAsync(
+                    sqlHelper,
                     sessionId,
                     "ComplicationReported",
                     eventDescription,
                     reportedBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return complicationId;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -108,8 +113,9 @@ namespace DMS.Api.DL
             int complicationId,
             string? resolutionNotes)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Session_Complications 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Session_Complications
                   SET ResolvedAt = NOW(),
                       ActionTaken = CONCAT(IFNULL(ActionTaken, ''), '\nResolved: ', @resolutionNotes)
                   WHERE ComplicationID = @complicationId",
