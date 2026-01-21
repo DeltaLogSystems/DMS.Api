@@ -4,7 +4,8 @@ namespace DMS.Api.DL
 {
     public static class AssetAssignmentsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,7 +14,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllAssignmentsAsync(int? assetId = null, int? centerId = null)
         {
-            string query = @"SELECT aa.*, 
+            using var sqlHelper = new MySQLHelper();
+            string query = @"SELECT aa.*,
                                     a.AssetCode, a.AssetName, a.CenterID,
                                     apt.AppointmentID, apt.AppointmentDate,
                                     p.PatientCode, p.PatientName
@@ -41,7 +43,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY aa.AssignedDate DESC, aa.AssignedTime DESC";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -49,8 +51,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssignmentsByDateAsync(int centerId, DateTime date)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT aa.*, 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT aa.*,
                          a.AssetCode, a.AssetName,
                          apt.AppointmentDate,
                          p.PatientCode, p.PatientName
@@ -76,7 +79,8 @@ namespace DMS.Api.DL
             TimeSpan startTime,
             TimeSpan endTime)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"SELECT COUNT(*) FROM T_Asset_Assignments
                   WHERE AssetID = @assetId
                   AND AssignedDate = @date
@@ -111,11 +115,12 @@ namespace DMS.Api.DL
             string? notes,
             int createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
-                @"INSERT INTO T_Asset_Assignments 
-                  (AssetID, AppointmentID, AssignedDate, AssignedTime, 
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
+                @"INSERT INTO T_Asset_Assignments
+                  (AssetID, AppointmentID, AssignedDate, AssignedTime,
                    SessionDuration, Status, Notes, CreatedDate, CreatedBy)
-                  VALUES 
+                  VALUES
                   (@assetId, @appointmentId, @assignedDate, @assignedTime,
                    @sessionDuration, 'Active', @notes, NOW(), @createdBy);
                   SELECT LAST_INSERT_ID();",
@@ -140,8 +145,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateAssignmentStatusAsync(int assignmentId, string status)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Asset_Assignments 
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Asset_Assignments
                   SET Status = @status
                   WHERE AssignmentID = @assignmentId",
                 "@assignmentId", assignmentId,
@@ -166,7 +172,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteAssignmentAsync(int assignmentId)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM T_Asset_Assignments WHERE AssignmentID = @assignmentId",
                 "@assignmentId", assignmentId
             );

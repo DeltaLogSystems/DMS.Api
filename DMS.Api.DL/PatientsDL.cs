@@ -4,7 +4,8 @@ namespace DMS.Api.DL
 {
     public static class PatientsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+        // Each method creates its own instance for thread-safety
 
         #region Patient Code Generation
 
@@ -13,8 +14,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<string> GeneratePatientCodeAsync(int companyId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Get company code
-            var companyCode = await _sqlHelper.ExecScalarAsync(
+            var companyCode = await sqlHelper.ExecScalarAsync(
                 "SELECT CompanyCode FROM M_Companies WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -25,7 +27,7 @@ namespace DMS.Api.DL
             }
 
             // Get last patient number for this company
-            var lastPatientCode = await _sqlHelper.ExecScalarAsync(
+            var lastPatientCode = await sqlHelper.ExecScalarAsync(
                 @"SELECT PatientCode FROM M_Patients 
                   WHERE CompanyID = @companyId 
                   ORDER BY PatientID DESC 
@@ -82,7 +84,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllPatientsAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -101,7 +104,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActivePatientsAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -121,7 +125,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientByIdAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -141,7 +146,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientByCodeAsync(string patientCode)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -161,7 +167,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientByMobileAsync(string mobileNo)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -181,7 +188,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientsByCompanyIdAsync(int companyId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -202,7 +210,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientsByCenterIdAsync(int centerId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -223,7 +232,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientsBySchemeTypeAsync(int schemeType)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -244,7 +254,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> SearchPatientsByNameAsync(string searchTerm)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.*, 
                          comp.CompanyName, comp.CompanyCode,
                          c.CenterName,
@@ -272,7 +283,8 @@ namespace DMS.Api.DL
             int? schemeType = null,
             bool? isActive = null)
         {
-            var query = @"SELECT p.*, 
+            
+            using var sqlHelper = new MySQLHelper();var query = @"SELECT p.*, 
                                  comp.CompanyName, comp.CompanyCode,
                                  c.CenterName,
                                  st.SchemeTypeName
@@ -321,7 +333,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY p.PatientID DESC";
 
-            var dt = await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            var dt = await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
             return dt;
         }
 
@@ -330,7 +342,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> MobileNumberExistsAsync(string mobileNo, int? excludePatientId = null)
         {
-            string query = excludePatientId.HasValue
+            
+            using var sqlHelper = new MySQLHelper();string query = excludePatientId.HasValue
                 ? "SELECT COUNT(*) FROM M_Patients WHERE MobileNo = @mobileNo AND PatientID != @patientId"
                 : "SELECT COUNT(*) FROM M_Patients WHERE MobileNo = @mobileNo";
 
@@ -338,7 +351,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@mobileNo", mobileNo, "@patientId", excludePatientId.Value }
                 : new object[] { "@mobileNo", mobileNo };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -347,7 +360,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> PatientCodeExistsAsync(string patientCode)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Patients WHERE PatientCode = @patientCode",
                 "@patientCode", patientCode
             );
@@ -359,11 +373,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetPatientCountByCompanyAsync(int companyId, bool activeOnly = false)
         {
-            string query = activeOnly
+            
+            using var sqlHelper = new MySQLHelper();string query = activeOnly
                 ? "SELECT COUNT(*) FROM M_Patients WHERE CompanyID = @companyId AND IsActive = 1"
                 : "SELECT COUNT(*) FROM M_Patients WHERE CompanyID = @companyId";
 
-            var result = await _sqlHelper.ExecScalarAsync(query, "@companyId", companyId);
+            var result = await sqlHelper.ExecScalarAsync(query, "@companyId", companyId);
             return Convert.ToInt32(result);
         }
 
@@ -372,11 +387,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetPatientCountByCenterAsync(int centerId, bool activeOnly = false)
         {
-            string query = activeOnly
+            
+            using var sqlHelper = new MySQLHelper();string query = activeOnly
                 ? "SELECT COUNT(*) FROM M_Patients WHERE CenterID = @centerId AND IsActive = 1"
                 : "SELECT COUNT(*) FROM M_Patients WHERE CenterID = @centerId";
 
-            var result = await _sqlHelper.ExecScalarAsync(query, "@centerId", centerId);
+            var result = await sqlHelper.ExecScalarAsync(query, "@centerId", centerId);
             return Convert.ToInt32(result);
         }
 
@@ -396,13 +412,14 @@ namespace DMS.Api.DL
             int? schemeType,
             int createdBy)
         {
-            // Generate patient code
+            
+            using var sqlHelper = new MySQLHelper();// Generate patient code
             string patientCode = await GeneratePatientCodeAsync(companyId);
 
             // Calculate age
             int age = CalculateAge(dateOfBirth);
 
-            var result = await _sqlHelper.ExecScalarAsync(
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Patients 
                   (PatientCode, PatientName, CompanyID, CenterID, MobileNo, 
                    DateOfBirth, Age, SchemeType, DialysisCycles, IsActive,
@@ -443,10 +460,11 @@ namespace DMS.Api.DL
             bool isActive,
             int modifiedBy)
         {
-            // Recalculate age
+            
+            using var sqlHelper = new MySQLHelper();// Recalculate age
             int age = CalculateAge(dateOfBirth);
 
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET PatientName = @patientName,
                       CompanyID = @companyId,
@@ -478,7 +496,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateDialysisCyclesAsync(int patientId, int cycles)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET DialysisCycles = @cycles,
                       ModifiedDate = CURDATE()
@@ -494,7 +513,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> IncrementDialysisCyclesAsync(int patientId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET DialysisCycles = DialysisCycles + 1,
                       ModifiedDate = CURDATE()
@@ -509,7 +529,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> TogglePatientStatusAsync(int patientId, int modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET IsActive = NOT IsActive,
                       ModifiedBy = @modifiedBy,
@@ -526,7 +547,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateAllPatientAgesAsync()
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET Age = TIMESTAMPDIFF(YEAR, DateOfBirth, CURDATE()) - 
                            (DATE_FORMAT(CURDATE(), '%m%d') < DATE_FORMAT(DateOfBirth, '%m%d')),
@@ -545,7 +567,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> SoftDeletePatientAsync(int patientId, int modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Patients 
                   SET IsActive = 0,
                       ModifiedBy = @modifiedBy,
@@ -562,7 +585,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeletePatientAsync(int patientId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Patients WHERE PatientID = @patientId",
                 "@patientId", patientId
             );

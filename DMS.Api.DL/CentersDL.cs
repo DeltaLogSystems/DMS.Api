@@ -13,7 +13,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllCentersAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -27,7 +28,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActiveCentersAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -42,7 +44,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCenterByIdAsync(int centerId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -57,7 +60,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCentersByCompanyIdAsync(int companyId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -73,7 +77,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActiveCentersByCompanyIdAsync(int companyId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -89,7 +94,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCenterByNameAsync(string centerName)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -104,7 +110,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> SearchCentersByNameAsync(string searchTerm)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
                   FROM M_Centers c
                   INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -120,7 +127,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> CenterNameExistsInCompanyAsync(string centerName, int companyId, int? excludeCenterId = null)
         {
-            string query = excludeCenterId.HasValue
+            
+            using var sqlHelper = new MySQLHelper();string query = excludeCenterId.HasValue
                 ? "SELECT COUNT(*) FROM M_Centers WHERE CenterName = @centerName AND CompanyID = @companyId AND CenterID != @centerId"
                 : "SELECT COUNT(*) FROM M_Centers WHERE CenterName = @centerName AND CompanyID = @companyId";
 
@@ -137,7 +145,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetCenterCountByCompanyAsync(int companyId, bool activeOnly = false)
         {
-            string query = activeOnly
+            
+            using var sqlHelper = new MySQLHelper();string query = activeOnly
                 ? "SELECT COUNT(*) FROM M_Centers WHERE CompanyID = @companyId AND IsActive = 1"
                 : "SELECT COUNT(*) FROM M_Centers WHERE CompanyID = @companyId";
 
@@ -159,7 +168,8 @@ namespace DMS.Api.DL
             bool isActive,
             string createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await _sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Centers (CompanyID, CenterName, CenterAddress, IsActive, CreatedDate, CreatedBy)
                   VALUES (@companyId, @centerName, @centerAddress, @isActive, CURDATE(), @createdBy);
                   SELECT LAST_INSERT_ID();",
@@ -186,7 +196,8 @@ namespace DMS.Api.DL
             string centerAddress,
             bool isActive)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await _sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Centers 
                   SET CompanyID = @companyId,
                       CenterName = @centerName,
@@ -207,7 +218,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleCenterStatusAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await _sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Centers SET IsActive = NOT IsActive WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -223,7 +235,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> SoftDeleteCenterAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await _sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Centers SET IsActive = 0 WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -235,7 +248,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteCenterAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            
+            using var sqlHelper = new MySQLHelper();var result = await _sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Centers WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -251,7 +265,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCenterByUserIdAsync(int userId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
           FROM M_Centers c
           INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -267,7 +282,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCenterByPatientIdAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, comp.CompanyName 
           FROM M_Centers c
           INNER JOIN M_Companies comp ON c.CompanyID = comp.CompanyID
@@ -283,7 +299,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyAndCenterByUserIdAsync(int userId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, 
                  comp.CompanyID, comp.CompanyName, comp.CompanyCode, 
                  comp.CompanyAddress, comp.CompanyLogo, comp.IsActive as CompanyIsActive
@@ -301,7 +318,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetCompanyAndCenterByPatientIdAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            
+            using var sqlHelper = new MySQLHelper();var dt = await _sqlHelper.ExecDataTableAsync(
                 @"SELECT c.*, 
                  comp.CompanyID, comp.CompanyName, comp.CompanyCode, 
                  comp.CompanyAddress, comp.CompanyLogo, comp.IsActive as CompanyIsActive
