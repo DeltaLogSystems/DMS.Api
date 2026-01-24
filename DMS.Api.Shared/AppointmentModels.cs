@@ -119,6 +119,7 @@ namespace DMS.Api.Shared
         public TimeSpan CenterOpenTime { get; set; }
         public TimeSpan CenterCloseTime { get; set; }
         public int SlotDuration { get; set; }
+        public int TotalMachines { get; set; }
         public List<TimeSlot> AvailableSlots { get; set; } = new List<TimeSlot>();
         public List<TimeSlot> BookedSlots { get; set; } = new List<TimeSlot>();
     }
@@ -134,6 +135,8 @@ namespace DMS.Api.Shared
         public string TimeRange => $"{FormatTime(StartTime)} - {FormatTime(EndTime)}";
         public int? AppointmentID { get; set; }
         public string? PatientName { get; set; }
+        public int AvailableMachines { get; set; }
+        public int BookedMachines { get; set; }
 
         /// <summary>
         /// Format TimeSpan to handle times crossing midnight (normalize to 24-hour cycle)

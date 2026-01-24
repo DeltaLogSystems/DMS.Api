@@ -40,30 +40,44 @@ namespace DMS.Api.DL
         }
 
         /// <summary>
-        /// Check if slot time range is available
+        /// Check if slot time range is available (based on active machine count)
         /// </summary>
         public static async Task<bool> IsSlotAvailableAsync(int centerId, DateTime slotDate, TimeSpan startTime, TimeSpan endTime, int? excludeAppointmentId = null)
         {
             using var sqlHelper = new MySQLHelper();
+
+            // Get count of active dialysis machines
+            int activeMachineCount = await AssetsDL.GetActiveMachineCountAsync(centerId);
+
+            if (activeMachineCount == 0)
+            {
+                return false; // No machines available
+            }
+
+            // Count overlapping booked slots
             string query = excludeAppointmentId.HasValue
-                ? @"SELECT COUNT(*) FROM T_Slots
-                    WHERE CenterID = @centerId
-                    AND SlotDate = @slotDate
-                    AND IsActive = 1
-                    AND AppointmentID != @appointmentId
+                ? @"SELECT COUNT(*) FROM T_Slots s
+                    INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
+                    WHERE s.CenterID = @centerId
+                    AND s.SlotDate = @slotDate
+                    AND s.IsActive = 1
+                    AND a.AppointmentStatus NOT IN (5, 6)
+                    AND s.AppointmentID != @appointmentId
                     AND (
-                        (@startTime >= SlotStartTime AND @startTime < SlotEndTime)
-                        OR (@endTime > SlotStartTime AND @endTime <= SlotEndTime)
-                        OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
+                        (@startTime >= s.SlotStartTime AND @startTime < s.SlotEndTime)
+                        OR (@endTime > s.SlotStartTime AND @endTime <= s.SlotEndTime)
+                        OR (@startTime <= s.SlotStartTime AND @endTime >= s.SlotEndTime)
                     )"
-                : @"SELECT COUNT(*) FROM T_Slots
-                    WHERE CenterID = @centerId
-                    AND SlotDate = @slotDate
-                    AND IsActive = 1
+                : @"SELECT COUNT(*) FROM T_Slots s
+                    INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
+                    WHERE s.CenterID = @centerId
+                    AND s.SlotDate = @slotDate
+                    AND s.IsActive = 1
+                    AND a.AppointmentStatus NOT IN (5, 6)
                     AND (
-                        (@startTime >= SlotStartTime AND @startTime < SlotEndTime)
-                        OR (@endTime > SlotStartTime AND @endTime <= SlotEndTime)
-                        OR (@startTime <= SlotStartTime AND @endTime >= SlotEndTime)
+                        (@startTime >= s.SlotStartTime AND @startTime < s.SlotEndTime)
+                        OR (@endTime > s.SlotStartTime AND @endTime <= s.SlotEndTime)
+                        OR (@startTime <= s.SlotStartTime AND @endTime >= s.SlotEndTime)
                     )";
 
             object[] parameters = excludeAppointmentId.HasValue
@@ -71,7 +85,50 @@ namespace DMS.Api.DL
                 : new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime };
 
             var result = await sqlHelper.ExecScalarAsync(query, parameters);
-            return Convert.ToInt32(result) == 0;
+            int bookedCount = Convert.ToInt32(result);
+
+            // Slot is available if booked count is less than machine count
+            return bookedCount < activeMachineCount;
+        }
+
+        /// <summary>
+        /// Get booked slots count for a specific time range
+        /// </summary>
+        public static async Task<int> GetBookedSlotsCountAsync(int centerId, DateTime slotDate, TimeSpan startTime, TimeSpan endTime, int? excludeAppointmentId = null)
+        {
+            using var sqlHelper = new MySQLHelper();
+
+            string query = excludeAppointmentId.HasValue
+                ? @"SELECT COUNT(*) FROM T_Slots s
+                    INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
+                    WHERE s.CenterID = @centerId
+                    AND s.SlotDate = @slotDate
+                    AND s.IsActive = 1
+                    AND a.AppointmentStatus NOT IN (5, 6)
+                    AND s.AppointmentID != @appointmentId
+                    AND (
+                        (@startTime >= s.SlotStartTime AND @startTime < s.SlotEndTime)
+                        OR (@endTime > s.SlotStartTime AND @endTime <= s.SlotEndTime)
+                        OR (@startTime <= s.SlotStartTime AND @endTime >= s.SlotEndTime)
+                    )"
+                : @"SELECT COUNT(*) FROM T_Slots s
+                    INNER JOIN T_Appointments a ON s.AppointmentID = a.AppointmentID
+                    WHERE s.CenterID = @centerId
+                    AND s.SlotDate = @slotDate
+                    AND s.IsActive = 1
+                    AND a.AppointmentStatus NOT IN (5, 6)
+                    AND (
+                        (@startTime >= s.SlotStartTime AND @startTime < s.SlotEndTime)
+                        OR (@endTime > s.SlotStartTime AND @endTime <= s.SlotEndTime)
+                        OR (@startTime <= s.SlotStartTime AND @endTime >= s.SlotEndTime)
+                    )";
+
+            object[] parameters = excludeAppointmentId.HasValue
+                ? new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime, "@appointmentId", excludeAppointmentId.Value }
+                : new object[] { "@centerId", centerId, "@slotDate", slotDate.Date, "@startTime", startTime, "@endTime", endTime };
+
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
+            return Convert.ToInt32(result);
         }
 
         /// <summary>

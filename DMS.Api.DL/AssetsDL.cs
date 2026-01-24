@@ -263,6 +263,23 @@ namespace DMS.Api.DL
             );
         }
 
+        /// <summary>
+        /// Get count of active dialysis machines for a center
+        /// </summary>
+        public static async Task<int> GetActiveMachineCountAsync(int centerId)
+        {
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
+                @"SELECT COUNT(*)
+                  FROM M_Assets
+                  WHERE CenterID = @centerId
+                  AND AssetType = 1
+                  AND IsActive = 1",
+                "@centerId", centerId
+            );
+            return Convert.ToInt32(result);
+        }
+
         #endregion
 
         #region INSERT Operations
