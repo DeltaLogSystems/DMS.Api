@@ -98,9 +98,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetStockSummaryAsync(int centerId)
         {
-            using var sqlHelper = new MySQLHelper();
-            return await sqlHelper.ExecDataTableAsync(
-                @"SELECT i.ItemCode, i.ItemName, i.UnitOfMeasure,
+            return await _sqlHelper.ExecDataTableAsync(
+                @"SELECT s.StockID,i.InventoryItemID,i.ItemCode, i.ItemName, i.UnitOfMeasure,
                          SUM(s.Quantity) as TotalQuantity,
                          SUM(s.AvailableQuantity) as TotalAvailable,
                          COUNT(DISTINCT s.StockID) as StockCount,
@@ -111,7 +110,7 @@ namespace DMS.Api.DL
                   INNER JOIN M_Inventory_Items i ON s.InventoryItemID = i.InventoryItemID
                   WHERE s.CenterID = @centerId
                   AND s.IsActive = 1
-                  GROUP BY i.InventoryItemID, i.ItemCode, i.ItemName, i.UnitOfMeasure, i.ReorderLevel
+                  GROUP BY i.InventoryItemID, i.ItemCode, i.ItemName, i.UnitOfMeasure, i.ReorderLevel, s.StockID
                   ORDER BY i.ItemName",
                 "@centerId", centerId
             );
