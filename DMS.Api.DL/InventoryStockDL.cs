@@ -95,7 +95,7 @@ namespace DMS.Api.DL
         public static async Task<DataTable> GetStockSummaryAsync(int centerId)
         {
             return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT i.ItemCode, i.ItemName, i.UnitOfMeasure,
+                @"SELECT s.StockID,i.InventoryItemID,i.ItemCode, i.ItemName, i.UnitOfMeasure,
                          SUM(s.Quantity) as TotalQuantity,
                          SUM(s.AvailableQuantity) as TotalAvailable,
                          COUNT(DISTINCT s.StockID) as StockCount,
@@ -106,7 +106,7 @@ namespace DMS.Api.DL
                   INNER JOIN M_Inventory_Items i ON s.InventoryItemID = i.InventoryItemID
                   WHERE s.CenterID = @centerId
                   AND s.IsActive = 1
-                  GROUP BY i.InventoryItemID, i.ItemCode, i.ItemName, i.UnitOfMeasure, i.ReorderLevel
+                  GROUP BY i.InventoryItemID, i.ItemCode, i.ItemName, i.UnitOfMeasure, i.ReorderLevel, s.StockID
                   ORDER BY i.ItemName",
                 "@centerId", centerId
             );
