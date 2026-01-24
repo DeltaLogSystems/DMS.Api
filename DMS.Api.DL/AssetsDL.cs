@@ -15,6 +15,14 @@ namespace DMS.Api.DL
         public static async Task<string> GenerateAssetCodeAsync(int assetTypeId, int centerId)
         {
             using var sqlHelper = new MySQLHelper();
+            return await GenerateAssetCodeAsync(sqlHelper, assetTypeId, centerId);
+        }
+
+        /// <summary>
+        /// Generate unique asset code (internal, transaction-aware)
+        /// </summary>
+        private static async Task<string> GenerateAssetCodeAsync(MySQLHelper sqlHelper, int assetTypeId, int centerId)
+        {
             // Get asset type code
             var dtType = await sqlHelper.ExecDataTableAsync(
                 "SELECT AssetTypeCode FROM M_Asset_Types WHERE AssetTypeID = @assetTypeId",
@@ -255,6 +263,23 @@ namespace DMS.Api.DL
             );
         }
 
+        /// <summary>
+        /// Get count of active dialysis machines for a center
+        /// </summary>
+        public static async Task<int> GetActiveMachineCountAsync(int centerId)
+        {
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
+                @"SELECT COUNT(*)
+                  FROM M_Assets
+                  WHERE CenterID = @centerId
+                  AND AssetType = 1
+                  AND IsActive = 1",
+                "@centerId", centerId
+            );
+            return Convert.ToInt32(result);
+        }
+
         #endregion
 
         #region INSERT Operations
@@ -280,8 +305,8 @@ namespace DMS.Api.DL
             {
                 await sqlHelper.BeginTransactionAsync();
 
-                // Generate asset code
-                string assetCode = await GenerateAssetCodeAsync(assetType, centerId);
+                // Generate asset code (use transaction-aware internal overload)
+                string assetCode = await GenerateAssetCodeAsync(sqlHelper, assetType, centerId);
 
                 // Calculate initial maintenance date if required
                 DateTime? nextMaintenanceDate = null;

@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class RolesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,7 +15,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllRolesAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Roles ORDER BY RoleName"
             );
             return dt;
@@ -24,7 +27,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetRoleByIdAsync(int roleId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Roles WHERE RoleID = @roleId",
                 "@roleId", roleId
             );
@@ -36,7 +40,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetRoleByNameAsync(string roleName)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Roles WHERE RoleName = @roleName",
                 "@roleName", roleName
             );
@@ -48,7 +53,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> SearchRolesByNameAsync(string searchTerm)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Roles WHERE RoleName LIKE @searchTerm ORDER BY RoleName",
                 "@searchTerm", $"%{searchTerm}%"
             );
@@ -60,6 +66,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> RoleNameExistsAsync(string roleName, int? excludeRoleId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeRoleId.HasValue
                 ? "SELECT COUNT(*) FROM M_Roles WHERE RoleName = @roleName AND RoleID != @roleId"
                 : "SELECT COUNT(*) FROM M_Roles WHERE RoleName = @roleName";
@@ -68,7 +75,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@roleName", roleName, "@roleId", excludeRoleId.Value }
                 : new object[] { "@roleName", roleName };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -77,7 +84,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetRoleCountAsync()
         {
-            var result = await _sqlHelper.ExecScalarAsync("SELECT COUNT(*) FROM M_Roles");
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync("SELECT COUNT(*) FROM M_Roles");
             return Convert.ToInt32(result);
         }
 
@@ -90,7 +98,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> InsertRoleAsync(string roleName)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Roles (RoleName)
                   VALUES (@roleName);
                   SELECT LAST_INSERT_ID();",
@@ -108,7 +117,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateRoleAsync(int roleId, string roleName)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_Roles SET RoleName = @roleName WHERE RoleID = @roleId",
                 "@roleId", roleId,
                 "@roleName", roleName
@@ -125,7 +135,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteRoleAsync(int roleId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Roles WHERE RoleID = @roleId",
                 "@roleId", roleId
             );

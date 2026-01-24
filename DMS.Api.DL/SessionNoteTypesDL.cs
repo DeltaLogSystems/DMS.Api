@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class SessionNoteTypesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -21,6 +23,7 @@ namespace DMS.Api.DL
             bool? mandatoryOnly = null,
             bool activeOnly = true)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = "SELECT * FROM M_Session_Note_Types WHERE 1=1";
 
             var parameters = new List<object>();
@@ -46,7 +49,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY DisplayOrder, NoteTypeName";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -54,7 +57,16 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetNoteTypeByIdAsync(int noteTypeId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await GetNoteTypeByIdAsync(sqlHelper, noteTypeId);
+        }
+
+        /// <summary>
+        /// Get note type by ID (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<DataTable> GetNoteTypeByIdAsync(MySQLHelper sqlHelper, int noteTypeId)
+        {
+            return await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Session_Note_Types WHERE NoteTypeID = @noteTypeId",
                 "@noteTypeId", noteTypeId
             );
@@ -65,7 +77,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetMandatoryNoteTypesAsync()
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT * FROM M_Session_Note_Types 
                   WHERE IsMandatory = 1 AND IsActive = 1 
                   ORDER BY DisplayOrder"
@@ -93,7 +106,8 @@ namespace DMS.Api.DL
             string? category,
             int createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Session_Note_Types 
                   (NoteTypeName, NoteTypeCode, Description, UnitOfMeasure, IsMandatory, 
                    IsNumeric, MinimumValue, MaximumValue, DefaultValue, DisplayOrder, Category,
@@ -141,7 +155,8 @@ namespace DMS.Api.DL
             string? category,
             int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Session_Note_Types 
                   SET NoteTypeName = @noteTypeName,
                       Description = @description,
@@ -176,7 +191,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleNoteTypeStatusAsync(int noteTypeId, bool isActive, int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Session_Note_Types 
                   SET IsActive = @isActive,
                       ModifiedDate = NOW(),
@@ -197,8 +213,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteNoteTypeAsync(int noteTypeId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Check if any session notes exist with this type
-            var count = await _sqlHelper.ExecScalarAsync(
+            var count = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM T_Session_Notes WHERE NoteTypeID = @noteTypeId",
                 "@noteTypeId", noteTypeId
             );
@@ -208,7 +225,7 @@ namespace DMS.Api.DL
                 throw new InvalidOperationException("Cannot delete note type with existing session notes");
             }
 
-            return await _sqlHelper.ExecNonQueryAsync(
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Session_Note_Types WHERE NoteTypeID = @noteTypeId",
                 "@noteTypeId", noteTypeId
             );

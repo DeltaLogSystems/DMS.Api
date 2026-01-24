@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class PatientCyclesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region Cycle Management
 
@@ -18,12 +20,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> StartNewCycleAsync(int patientId, DateTime firstAppointmentDate)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get patient's current cycle info
-                var dtPatient = await _sqlHelper.ExecDataTableAsync(
+                var dtPatient = await sqlHelper.ExecDataTableAsync(
                     "SELECT CurrentCycleNumber, TotalCompletedCycles FROM M_Patients WHERE PatientID = @patientId",
                     "@patientId", patientId
                 );
@@ -40,7 +43,7 @@ namespace DMS.Api.DL
                 DateTime cycleEndDate = cycleStartDate.AddDays(42); // MJPJAY: 42 days cycle
 
                 // Update patient's current cycle information
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE M_Patients 
                       SET CurrentCycleNumber = @cycleNumber,
                           CurrentCycleStartDate = @startDate,
@@ -54,7 +57,7 @@ namespace DMS.Api.DL
                 );
 
                 // Insert cycle history record
-                var cycleHistoryId = await _sqlHelper.ExecScalarAsync(
+                var cycleHistoryId = await sqlHelper.ExecScalarAsync(
                     @"INSERT INTO T_PatientCycles 
                       (PatientID, CycleNumber, CycleStartDate, CycleEndDate, 
                        PlannedSessions, CompletedSessions, CycleStatus, FirstAppointmentDate)
@@ -69,12 +72,12 @@ namespace DMS.Api.DL
                     "@firstAppointmentDate", firstAppointmentDate
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(cycleHistoryId);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -84,12 +87,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateCycleSessionCountAsync(int patientId)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get patient's current cycle info
-                var dtPatient = await _sqlHelper.ExecDataTableAsync(
+                var dtPatient = await sqlHelper.ExecDataTableAsync(
                     @"SELECT CurrentCycleNumber, CurrentCycleStartDate, 
                              CurrentCycleEndDate, CurrentCycleSessionCount
                       FROM M_Patients 
@@ -116,7 +120,7 @@ namespace DMS.Api.DL
 
                 if (cycleStartDate.HasValue && cycleEndDate.HasValue)
                 {
-                    var result = await _sqlHelper.ExecScalarAsync(
+                    var result = await sqlHelper.ExecScalarAsync(
                         @"SELECT COUNT(*) 
                           FROM T_Appointments 
                           WHERE PatientID = @patientId 
@@ -131,7 +135,7 @@ namespace DMS.Api.DL
                 }
 
                 // Update patient's current cycle session count
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE M_Patients 
                       SET CurrentCycleSessionCount = @sessionCount,
                           DialysisCycles = (SELECT COUNT(*) FROM T_Appointments 
@@ -144,7 +148,7 @@ namespace DMS.Api.DL
                 // Update cycle history
                 if (cycleStartDate.HasValue)
                 {
-                    await _sqlHelper.ExecNonQueryAsync(
+                    await sqlHelper.ExecNonQueryAsync(
                         @"UPDATE T_PatientCycles 
                           SET CompletedSessions = @completedSessions,
                               LastAppointmentDate = (SELECT MAX(AppointmentDate) 
@@ -162,12 +166,12 @@ namespace DMS.Api.DL
                     );
                 }
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return completedSessionsInCycle;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -177,12 +181,13 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> CompleteCycleAndStartNewAsync(int patientId)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Get patient's current cycle info
-                var dtPatient = await _sqlHelper.ExecDataTableAsync(
+                var dtPatient = await sqlHelper.ExecDataTableAsync(
                     @"SELECT CurrentCycleNumber, CurrentCycleStartDate, 
                              CurrentCycleEndDate, TotalCompletedCycles, CurrentCycleSessionCount
                       FROM M_Patients 
@@ -203,7 +208,7 @@ namespace DMS.Api.DL
                 // Mark current cycle as completed or incomplete
                 string cycleStatus = completedSessions >= 18 ? "Completed" : "Incomplete";
 
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE T_PatientCycles 
                       SET CycleStatus = @status,
                           CompletedDate = NOW()
@@ -222,7 +227,7 @@ namespace DMS.Api.DL
                     : totalCompletedCycles;
 
                 // Reset current cycle info (will be set when next appointment is created)
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE M_Patients 
                       SET CurrentCycleNumber = @newCycleNumber,
                           TotalCompletedCycles = @totalCompleted,
@@ -235,12 +240,12 @@ namespace DMS.Api.DL
                     "@totalCompleted", newTotalCompletedCycles
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return true;
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -250,7 +255,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> IsCycleExpiredAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT CurrentCycleEndDate 
                   FROM M_Patients 
                   WHERE PatientID = @patientId",
@@ -271,7 +277,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientCurrentCycleAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.PatientID, p.PatientCode, p.PatientName,
                          p.CurrentCycleNumber, p.CurrentCycleStartDate, p.CurrentCycleEndDate,
                          p.CurrentCycleSessionCount, p.TotalCompletedCycles, p.DialysisCycles,
@@ -289,7 +296,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetPatientCycleHistoryAsync(int patientId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT * 
                   FROM T_PatientCycles 
                   WHERE PatientID = @patientId 
@@ -304,7 +312,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetActiveCyclesForExpiryCheckAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT p.PatientID, p.CurrentCycleNumber, p.CurrentCycleEndDate
                   FROM M_Patients p
                   WHERE p.CurrentCycleEndDate IS NOT NULL
@@ -324,6 +333,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ProcessExpiredCyclesAsync()
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
                 var dtExpired = await GetActiveCyclesForExpiryCheckAsync();

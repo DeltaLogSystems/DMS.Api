@@ -7,14 +7,17 @@ namespace DMS.Api.DL
     /// </summary>
     public static class AuthenticationDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         /// <summary>
         /// Validate user login with all necessary checks
         /// </summary>
         public static async Task<DataTable> ValidateLoginAsync(string username, string password)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.UserID, u.FirstName, u.LastName, u.EmailID, u.MobileNo, 
                          u.UserName, u.CompanyID, u.CenterID, u.UserRole, 
                          u.IsSuperUser, u.IsActive as UserIsActive,
@@ -37,7 +40,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> UsernameExistsAsync(string username)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Users WHERE UserName = @username",
                 "@username", username
             );
@@ -49,7 +53,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUserWithStatusAsync(string username)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.UserID, u.UserName, u.IsActive as UserIsActive,
                          comp.CompanyID, comp.CompanyName, comp.IsActive as CompanyIsActive,
                          c.CenterID, c.CenterName, c.IsActive as CenterIsActive
@@ -67,6 +72,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> LogLoginActivityAsync(int userId, bool isSuccessful, string ipAddress = "")
         {
+            using var sqlHelper = new MySQLHelper();
             // This is a placeholder for future audit logging
             // You can create a login_audit table later if needed
             await Task.CompletedTask;

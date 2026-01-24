@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class AssetTypesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,11 +15,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllAssetTypesAsync(bool activeOnly = true)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = activeOnly
                 ? "SELECT * FROM M_Asset_Types WHERE IsActive = 1 ORDER BY AssetTypeName"
                 : "SELECT * FROM M_Asset_Types ORDER BY AssetTypeName";
 
-            return await _sqlHelper.ExecDataTableAsync(query);
+            return await sqlHelper.ExecDataTableAsync(query);
         }
 
         /// <summary>
@@ -25,7 +28,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAssetTypeByIdAsync(int assetTypeId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_Asset_Types WHERE AssetTypeID = @assetTypeId",
                 "@assetTypeId", assetTypeId
             );
@@ -46,7 +50,8 @@ namespace DMS.Api.DL
             int maintenanceIntervalDays,
             int createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Asset_Types 
                   (AssetTypeName, AssetTypeCode, Description, RequiresMaintenance, 
                    MaintenanceIntervalDays, IsActive, CreatedDate, CreatedBy)
@@ -80,7 +85,8 @@ namespace DMS.Api.DL
             int maintenanceIntervalDays,
             int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Asset_Types 
                   SET AssetTypeName = @assetTypeName,
                       Description = @description,
@@ -103,7 +109,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleAssetTypeStatusAsync(int assetTypeId, bool isActive, int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Asset_Types 
                   SET IsActive = @isActive,
                       ModifiedDate = NOW(),
@@ -124,8 +131,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteAssetTypeAsync(int assetTypeId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Check if any assets exist with this type
-            var count = await _sqlHelper.ExecScalarAsync(
+            var count = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Assets WHERE AssetType = @assetTypeId",
                 "@assetTypeId", assetTypeId
             );
@@ -135,7 +143,7 @@ namespace DMS.Api.DL
                 throw new InvalidOperationException("Cannot delete asset type with existing assets");
             }
 
-            return await _sqlHelper.ExecNonQueryAsync(
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Asset_Types WHERE AssetTypeID = @assetTypeId",
                 "@assetTypeId", assetTypeId
             );

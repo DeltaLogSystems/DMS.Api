@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class MaintenanceDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,6 +15,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllMaintenanceAsync(int? assetId = null, int? centerId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT m.*, 
                                     a.AssetCode, a.AssetName, a.CenterID,
                                     c.CenterName,
@@ -41,7 +44,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY m.MaintenanceDate DESC";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -49,7 +52,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetMaintenanceByIdAsync(int maintenanceId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT m.*, 
                          a.AssetCode, a.AssetName,
                          at.AssetTypeName
@@ -78,12 +82,13 @@ namespace DMS.Api.DL
             DateTime? nextMaintenanceDate,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
                 // Insert maintenance record
-                var result = await _sqlHelper.ExecScalarAsync(
+                var result = await sqlHelper.ExecScalarAsync(
                     @"INSERT INTO T_Asset_Maintenance 
                       (AssetID, MaintenanceDate, MaintenanceType, Description, 
                        TechnicianName, Cost, NextMaintenanceDate, Status, CreatedDate, CreatedBy)
@@ -102,7 +107,7 @@ namespace DMS.Api.DL
                 );
 
                 // Update asset maintenance dates
-                await _sqlHelper.ExecNonQueryAsync(
+                await sqlHelper.ExecNonQueryAsync(
                     @"UPDATE M_Assets 
                       SET LastMaintenanceDate = @maintenanceDate,
                           NextMaintenanceDate = @nextMaintenanceDate,
@@ -115,12 +120,12 @@ namespace DMS.Api.DL
                     "@createdBy", createdBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(result);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }

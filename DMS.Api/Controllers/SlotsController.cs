@@ -10,7 +10,7 @@ namespace DMS.Api.Controllers
     public class SlotsController : ControllerBase
     {
         /// <summary>
-        /// Get slot availability for a specific date and center
+        /// Get slot availability for a specific date and center (based on active machine count)
         /// </summary>
         [HttpGet("availability")]
         public async Task<IActionResult> GetSlotAvailability(
@@ -35,58 +35,49 @@ namespace DMS.Api.Controllers
                 TimeSpan centerCloseTime = (TimeSpan)configRow["CenterCloseTime"];
                 int slotDuration = Convert.ToInt32(configRow["SlotDuration"]);
 
+                // Get total active dialysis machines for the center
+                int totalMachines = await AssetsDL.GetActiveMachineCountAsync(centerId);
+
+                if (totalMachines == 0)
+                {
+                    return Ok(ApiResponse<SlotAvailabilityResponse>.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "No active dialysis machines available at this center"
+                    ));
+                }
+
                 // Get booked slots for this date
                 var dtBooked = await AppointmentsDL.GetBookedSlotsAsync(centerId, date);
 
                 // Generate all possible slots
                 var allSlots = GenerateTimeSlots(centerOpenTime, centerCloseTime, slotDuration);
 
-                // Mark booked slots
-                var availableSlots = new List<TimeSlot>();
-                var bookedSlots = new List<TimeSlot>();
+                // Collect slots with machine availability information
+                var slots = new List<TimeSlot>();
 
                 foreach (var slot in allSlots)
                 {
-                    bool isBooked = false;
-                    DataRow? bookedRow = null;
+                    // Count how many machines are booked for this slot
+                    int bookedCount = await AppointmentsDL.GetBookedSlotsCountAsync(
+                        centerId, date, slot.StartTime, slot.EndTime
+                    );
 
-                    foreach (DataRow row in dtBooked.Rows)
-                    {
-                        TimeSpan bookedStart = (TimeSpan)row["SlotStartTime"];
-                        TimeSpan bookedEnd = (TimeSpan)row["SlotEndTime"];
+                    int availableCount = totalMachines - bookedCount;
+                    bool isAvailable = availableCount > 0;
 
-                        // Check if slots overlap
-                        if ((slot.StartTime >= bookedStart && slot.StartTime < bookedEnd) ||
-                            (slot.EndTime > bookedStart && slot.EndTime <= bookedEnd) ||
-                            (slot.StartTime <= bookedStart && slot.EndTime >= bookedEnd))
-                        {
-                            isBooked = true;
-                            bookedRow = row;
-                            break;
-                        }
-                    }
-
-                    if (isBooked && bookedRow != null)
+                    slots.Add(new TimeSlot
                     {
-                        bookedSlots.Add(new TimeSlot
-                        {
-                            StartTime = (TimeSpan)bookedRow["SlotStartTime"],
-                            EndTime = (TimeSpan)bookedRow["SlotEndTime"],
-                            IsAvailable = false,
-                            AppointmentID = Convert.ToInt32(bookedRow["AppointmentID"]),
-                            PatientName = bookedRow["PatientName"]?.ToString()
-                        });
-                    }
-                    else
-                    {
-                        availableSlots.Add(new TimeSlot
-                        {
-                            StartTime = slot.StartTime,
-                            EndTime = slot.EndTime,
-                            IsAvailable = true
-                        });
-                    }
+                        StartTime = slot.StartTime,
+                        EndTime = slot.EndTime,
+                        IsAvailable = isAvailable,
+                        AvailableMachines = availableCount,
+                        BookedMachines = bookedCount
+                    });
                 }
+
+                // Separate available and fully booked slots
+                var availableSlots = slots.Where(s => s.IsAvailable).ToList();
+                var fullyBookedSlots = slots.Where(s => !s.IsAvailable).ToList();
 
                 var response = new SlotAvailabilityResponse
                 {
@@ -94,13 +85,14 @@ namespace DMS.Api.Controllers
                     CenterOpenTime = centerOpenTime,
                     CenterCloseTime = centerCloseTime,
                     SlotDuration = slotDuration,
+                    TotalMachines = totalMachines,
                     AvailableSlots = availableSlots,
-                    BookedSlots = bookedSlots
+                    BookedSlots = fullyBookedSlots
                 };
 
                 return Ok(ApiResponse<SlotAvailabilityResponse>.SuccessResponse(
                     ResponseStatus.DataRetrieved,
-                    $"Found {availableSlots.Count} available slot(s) and {bookedSlots.Count} booked slot(s)",
+                    $"Found {availableSlots.Count} available slot(s) with {totalMachines} machines",
                     response
                 ));
             }
@@ -114,7 +106,7 @@ namespace DMS.Api.Controllers
         }
 
         /// <summary>
-        /// Check if specific time slot is available
+        /// Check if specific time slot is available (based on active machine count)
         /// </summary>
         [HttpGet("check-availability")]
         public async Task<IActionResult> CheckSlotAvailability(
@@ -128,23 +120,51 @@ namespace DMS.Api.Controllers
                 TimeSpan slotStartTime = TimeSpan.Parse(startTime);
                 TimeSpan slotEndTime = TimeSpan.Parse(endTime);
 
-                bool isAvailable = await AppointmentsDL.IsSlotAvailableAsync(
-                    centerId,
-                    date,
-                    slotStartTime,
-                    slotEndTime
+                // Get total active machines
+                int totalMachines = await AssetsDL.GetActiveMachineCountAsync(centerId);
+
+                if (totalMachines == 0)
+                {
+                    return Ok(new ApiResponse<object>(
+                        ResponseStatus.ValidationError,
+                        "No active dialysis machines available at this center",
+                        new
+                        {
+                            centerId = centerId,
+                            date = date,
+                            startTime = startTime,
+                            endTime = endTime,
+                            isAvailable = false,
+                            totalMachines = 0,
+                            bookedMachines = 0,
+                            availableMachines = 0
+                        }
+                    ));
+                }
+
+                // Get booked count for this slot
+                int bookedCount = await AppointmentsDL.GetBookedSlotsCountAsync(
+                    centerId, date, slotStartTime, slotEndTime
                 );
+
+                int availableCount = totalMachines - bookedCount;
+                bool isAvailable = availableCount > 0;
 
                 return Ok(new ApiResponse<object>(
                     isAvailable ? ResponseStatus.Success : ResponseStatus.ValidationError,
-                    isAvailable ? "Time slot is available" : "Time slot is not available",
+                    isAvailable
+                        ? $"Time slot is available ({availableCount} of {totalMachines} machines available)"
+                        : "Time slot is fully booked (all machines occupied)",
                     new
                     {
                         centerId = centerId,
                         date = date,
                         startTime = startTime,
                         endTime = endTime,
-                        isAvailable = isAvailable
+                        isAvailable = isAvailable,
+                        totalMachines = totalMachines,
+                        bookedMachines = bookedCount,
+                        availableMachines = availableCount
                     }
                 ));
             }
@@ -158,7 +178,7 @@ namespace DMS.Api.Controllers
         }
 
         /// <summary>
-        /// Get booked slots for a specific date
+        /// Get booked slots for a specific date (grouped by time with machine utilization)
         /// </summary>
         [HttpGet("booked")]
         public async Task<IActionResult> GetBookedSlots(
@@ -167,6 +187,9 @@ namespace DMS.Api.Controllers
         {
             try
             {
+                // Get total active machines
+                int totalMachines = await AssetsDL.GetActiveMachineCountAsync(centerId);
+
                 var dt = await AppointmentsDL.GetBookedSlotsAsync(centerId, date);
                 var bookedSlots = new List<object>();
 
@@ -185,15 +208,20 @@ namespace DMS.Api.Controllers
                     });
                 }
 
-                return Ok(ApiResponse<List<object>>.SuccessResponse(
+                return Ok(ApiResponse<object>.SuccessResponse(
                     ResponseStatus.DataRetrieved,
-                    $"Retrieved {bookedSlots.Count} booked slot(s)",
-                    bookedSlots
+                    $"Retrieved {bookedSlots.Count} booked slot(s) from {totalMachines} total machines",
+                    new
+                    {
+                        totalMachines = totalMachines,
+                        bookedAppointmentsCount = bookedSlots.Count,
+                        slots = bookedSlots
+                    }
                 ));
             }
             catch (Exception ex)
             {
-                return StatusCode(500, ApiResponse<List<object>>.ErrorResponse(
+                return StatusCode(500, ApiResponse<object>.ErrorResponse(
                     ResponseStatus.InternalServerError,
                     $"Error retrieving booked slots: {ex.Message}"
                 ));

@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class UsersDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,7 +15,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllUsersAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -32,7 +35,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUserByIdAsync(int userId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -52,7 +56,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUserByUsernameAsync(string username)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -72,7 +77,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUserByEmailAsync(string email)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -92,7 +98,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUsersByCompanyIdAsync(int companyId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -113,7 +120,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUsersByCenterIdAsync(int centerId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -134,7 +142,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetUsersByRoleIdAsync(int roleId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -155,7 +164,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSuperUsersAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -175,7 +185,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> SearchUsersByNameAsync(string searchTerm)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -196,6 +207,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> UsernameExistsAsync(string username, int? excludeUserId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeUserId.HasValue
                 ? "SELECT COUNT(*) FROM M_Users WHERE UserName = @username AND UserID != @userId"
                 : "SELECT COUNT(*) FROM M_Users WHERE UserName = @username";
@@ -204,7 +216,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@username", username, "@userId", excludeUserId.Value }
                 : new object[] { "@username", username };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -213,6 +225,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> EmailExistsAsync(string email, int? excludeUserId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeUserId.HasValue
                 ? "SELECT COUNT(*) FROM M_Users WHERE EmailID = @email AND UserID != @userId"
                 : "SELECT COUNT(*) FROM M_Users WHERE EmailID = @email";
@@ -221,7 +234,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@email", email, "@userId", excludeUserId.Value }
                 : new object[] { "@email", email };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -230,7 +243,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> ValidateUserAsync(string username, string password)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.*, 
                          comp.CompanyName, 
                          c.CenterName, 
@@ -251,7 +265,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetUserCountByCompanyAsync(int companyId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Users WHERE CompanyID = @companyId",
                 "@companyId", companyId
             );
@@ -263,7 +278,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetUserCountByCenterAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Users WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -290,7 +306,8 @@ namespace DMS.Api.DL
             bool isSuperUser,
             string createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_Users (FirstName, LastName, EmailID, MobileNo, UserName, Password, 
                                        CompanyID, CenterID, UserRole, IsSuperUser, 
                                        CreatedDate, CreatedBy, ModifiedBy, ModifiedDate)
@@ -333,7 +350,8 @@ namespace DMS.Api.DL
             bool isSuperUser,
             string modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
                   SET FirstName = @firstName,
                       LastName = @lastName,
@@ -367,7 +385,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdatePasswordAsync(int userId, string newPassword, string modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
                   SET Password = @newPassword,
                       ModifiedBy = @modifiedBy,
@@ -385,7 +404,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdatePasswordByUsernameAsync(string username, string newPassword)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
                   SET Password = @newPassword,
                       ModifiedDate = CURDATE()
@@ -401,7 +421,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleSuperUserStatusAsync(int userId, string modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
                   SET IsSuperUser = NOT IsSuperUser,
                       ModifiedBy = @modifiedBy,
@@ -422,7 +443,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteUserAsync(int userId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Users WHERE UserID = @userId",
                 "@userId", userId
             );
@@ -438,7 +460,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> AuthenticateUserAsync(string username, string password)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT u.UserID, u.FirstName, u.LastName, u.EmailID, u.MobileNo, 
                  u.UserName, u.CompanyID, u.CenterID, u.UserRole, 
                  u.IsSuperUser, u.IsActive as UserIsActive,
@@ -461,7 +484,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> UserExistsByUsernameAsync(string username)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM M_Users WHERE UserName = @username",
                 "@username", username
             );
@@ -473,7 +497,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> IsUserActiveAsync(int userId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT IsActive FROM M_Users WHERE UserID = @userId",
                 "@userId", userId
             );
@@ -485,7 +510,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleUserStatusAsync(int userId, string modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
           SET IsActive = NOT IsActive,
               ModifiedBy = @modifiedBy,
@@ -502,7 +528,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateUserStatusAsync(int userId, bool isActive, string modifiedBy)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Users 
           SET IsActive = @isActive,
               ModifiedBy = @modifiedBy,

@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class IndividualItemsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -23,6 +25,7 @@ namespace DMS.Api.DL
             string? itemStatus = null,
             bool availableOnly = true)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT ii.*, 
                                     i.ItemCode, i.ItemName, i.MinimumUsageCount,
                                     s.BatchNumber, s.ExpiryDate
@@ -68,7 +71,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY ii.CurrentUsageCount ASC, ii.IndividualItemCode";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -76,7 +79,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAvailableItemsForSessionAsync(int centerId, int inventoryItemId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT ii.*, 
                          i.ItemCode, i.ItemName, i.MinimumUsageCount, i.MaximumUsageCount,
                          s.BatchNumber, s.ExpiryDate,
@@ -115,8 +119,17 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetIndividualItemByIdAsync(int individualItemId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT ii.*, 
+            using var sqlHelper = new MySQLHelper();
+            return await GetIndividualItemByIdAsync(sqlHelper, individualItemId);
+        }
+
+        /// <summary>
+        /// Get individual item by ID (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<DataTable> GetIndividualItemByIdAsync(MySQLHelper sqlHelper, int individualItemId)
+        {
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT ii.*,
                          i.ItemCode, i.ItemName, i.MinimumUsageCount, i.MaximumUsageCount,
                          i.RequiresApprovalForEarlyDiscard,
                          s.BatchNumber, s.ExpiryDate
@@ -137,16 +150,25 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> IncrementUsageCountAsync(int individualItemId)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Inventory_Individual_Items 
+            using var sqlHelper = new MySQLHelper();
+            return await IncrementUsageCountAsync(sqlHelper, individualItemId);
+        }
+
+        /// <summary>
+        /// Increment usage count (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<int> IncrementUsageCountAsync(MySQLHelper sqlHelper, int individualItemId)
+        {
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Inventory_Individual_Items
                   SET CurrentUsageCount = CurrentUsageCount + 1,
                       LastUsedDate = NOW(),
                       FirstUsedDate = COALESCE(FirstUsedDate, NOW()),
-                      ItemStatus = CASE 
+                      ItemStatus = CASE
                           WHEN CurrentUsageCount + 1 >= MaxUsageCount THEN 'Exhausted'
                           ELSE 'InUse'
                       END,
-                      IsAvailable = CASE 
+                      IsAvailable = CASE
                           WHEN CurrentUsageCount + 1 >= MaxUsageCount THEN 0
                           ELSE 1
                       END
@@ -160,8 +182,17 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DiscardItemAsync(int individualItemId, string discardReason)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Inventory_Individual_Items 
+            using var sqlHelper = new MySQLHelper();
+            return await DiscardItemAsync(sqlHelper, individualItemId, discardReason);
+        }
+
+        /// <summary>
+        /// Mark item as discarded (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<int> DiscardItemAsync(MySQLHelper sqlHelper, int individualItemId, string discardReason)
+        {
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Inventory_Individual_Items
                   SET ItemStatus = 'Discarded',
                       IsAvailable = 0,
                       DiscardedDate = NOW(),
@@ -177,10 +208,19 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> UpdateItemStatusAsync(int individualItemId, string itemStatus)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
-                @"UPDATE T_Inventory_Individual_Items 
+            using var sqlHelper = new MySQLHelper();
+            return await UpdateItemStatusAsync(sqlHelper, individualItemId, itemStatus);
+        }
+
+        /// <summary>
+        /// Update item status (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<int> UpdateItemStatusAsync(MySQLHelper sqlHelper, int individualItemId, string itemStatus)
+        {
+            return await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE T_Inventory_Individual_Items
                   SET ItemStatus = @itemStatus,
-                      IsAvailable = CASE 
+                      IsAvailable = CASE
                           WHEN @itemStatus IN ('Discarded', 'Exhausted', 'DiscardRequested') THEN 0
                           ELSE 1
                       END

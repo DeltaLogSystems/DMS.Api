@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class CenterConfigurationDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,7 +15,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllConfigurationsAsync()
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT cc.*, c.CenterName, c.CompanyID, comp.CompanyName
                   FROM L_Center_Configuration cc
                   INNER JOIN M_Centers c ON cc.CenterID = c.CenterID
@@ -28,7 +31,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetConfigurationByIdAsync(int configurationId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT cc.*, c.CenterName, c.CompanyID, comp.CompanyName
                   FROM L_Center_Configuration cc
                   INNER JOIN M_Centers c ON cc.CenterID = c.CenterID
@@ -44,7 +48,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetConfigurationByCenterIdAsync(int centerId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 @"SELECT cc.*, c.CenterName, c.CompanyID, comp.CompanyName
                   FROM L_Center_Configuration cc
                   INNER JOIN M_Centers c ON cc.CenterID = c.CenterID
@@ -60,7 +65,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> CenterHasConfigurationAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM L_Center_Configuration WHERE CenterID = @centerId",
                 "@centerId", centerId
             );
@@ -79,7 +85,8 @@ namespace DMS.Api.DL
             decimal? machineSessionHours,
             bool isFixedHoursForSession)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO L_Center_Configuration (CenterID, MachineSessionHours, IsFixedHoursForSession)
                   VALUES (@centerId, @machineSessionHours, @isFixedHoursForSession);
                   SELECT LAST_INSERT_ID();",
@@ -102,7 +109,8 @@ namespace DMS.Api.DL
             decimal? machineSessionHours,
             bool isFixedHoursForSession)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE L_Center_Configuration 
                   SET MachineSessionHours = @machineSessionHours,
                       IsFixedHoursForSession = @isFixedHoursForSession
@@ -122,7 +130,8 @@ namespace DMS.Api.DL
             decimal? machineSessionHours,
             bool isFixedHoursForSession)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE L_Center_Configuration 
                   SET MachineSessionHours = @machineSessionHours,
                       IsFixedHoursForSession = @isFixedHoursForSession
@@ -143,7 +152,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteConfigurationAsync(int configurationId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM L_Center_Configuration WHERE ConfigurationID = @configurationId",
                 "@configurationId", configurationId
             );
@@ -155,7 +165,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteConfigurationByCenterIdAsync(int centerId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM L_Center_Configuration WHERE CenterID = @centerId",
                 "@centerId", centerId
             );

@@ -4,7 +4,9 @@ namespace DMS.Api.DL
 {
     public static class SchemeTypesDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region GET Operations
 
@@ -13,11 +15,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetAllSchemeTypesAsync(bool activeOnly = false)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = activeOnly
                 ? "SELECT * FROM M_SchemeTypes WHERE IsActive = 1 ORDER BY SchemeTypeName"
                 : "SELECT * FROM M_SchemeTypes ORDER BY SchemeTypeName";
 
-            var dt = await _sqlHelper.ExecDataTableAsync(query);
+            var dt = await sqlHelper.ExecDataTableAsync(query);
             return dt;
         }
 
@@ -26,7 +29,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSchemeTypeByIdAsync(int schemeTypeId)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_SchemeTypes WHERE SchemeTypeID = @schemeTypeId",
                 "@schemeTypeId", schemeTypeId
             );
@@ -38,7 +42,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetSchemeTypeByNameAsync(string schemeTypeName)
         {
-            var dt = await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            var dt = await sqlHelper.ExecDataTableAsync(
                 "SELECT * FROM M_SchemeTypes WHERE SchemeTypeName = @schemeTypeName",
                 "@schemeTypeName", schemeTypeName
             );
@@ -50,6 +55,7 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<bool> SchemeTypeNameExistsAsync(string schemeTypeName, int? excludeSchemeTypeId = null)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = excludeSchemeTypeId.HasValue
                 ? "SELECT COUNT(*) FROM M_SchemeTypes WHERE SchemeTypeName = @schemeTypeName AND SchemeTypeID != @schemeTypeId"
                 : "SELECT COUNT(*) FROM M_SchemeTypes WHERE SchemeTypeName = @schemeTypeName";
@@ -58,7 +64,7 @@ namespace DMS.Api.DL
                 ? new object[] { "@schemeTypeName", schemeTypeName, "@schemeTypeId", excludeSchemeTypeId.Value }
                 : new object[] { "@schemeTypeName", schemeTypeName };
 
-            var result = await _sqlHelper.ExecScalarAsync(query, parameters);
+            var result = await sqlHelper.ExecScalarAsync(query, parameters);
             return Convert.ToInt32(result) > 0;
         }
 
@@ -67,11 +73,12 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> GetSchemeTypeCountAsync(bool activeOnly = false)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = activeOnly
                 ? "SELECT COUNT(*) FROM M_SchemeTypes WHERE IsActive = 1"
                 : "SELECT COUNT(*) FROM M_SchemeTypes";
 
-            var result = await _sqlHelper.ExecScalarAsync(query);
+            var result = await sqlHelper.ExecScalarAsync(query);
             return Convert.ToInt32(result);
         }
 
@@ -87,7 +94,8 @@ namespace DMS.Api.DL
             string description,
             string createdBy)
         {
-            var result = await _sqlHelper.ExecScalarAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecScalarAsync(
                 @"INSERT INTO M_SchemeTypes (SchemeTypeName, Description, IsActive, CreatedDate, CreatedBy)
                   VALUES (@schemeTypeName, @description, 1, CURDATE(), @createdBy);
                   SELECT LAST_INSERT_ID();",
@@ -110,7 +118,8 @@ namespace DMS.Api.DL
             string schemeTypeName,
             string description)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_SchemeTypes 
                   SET SchemeTypeName = @schemeTypeName,
                       Description = @description
@@ -127,7 +136,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleSchemeTypeStatusAsync(int schemeTypeId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_SchemeTypes SET IsActive = NOT IsActive WHERE SchemeTypeID = @schemeTypeId",
                 "@schemeTypeId", schemeTypeId
             );
@@ -143,7 +153,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> SoftDeleteSchemeTypeAsync(int schemeTypeId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "UPDATE M_SchemeTypes SET IsActive = 0 WHERE SchemeTypeID = @schemeTypeId",
                 "@schemeTypeId", schemeTypeId
             );
@@ -155,7 +166,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteSchemeTypeAsync(int schemeTypeId)
         {
-            var result = await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_SchemeTypes WHERE SchemeTypeID = @schemeTypeId",
                 "@schemeTypeId", schemeTypeId
             );

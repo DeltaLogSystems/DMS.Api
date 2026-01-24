@@ -96,8 +96,8 @@ namespace DMS.Api.DL
 
                 int sessionInventoryId = Convert.ToInt32(result);
 
-                // Get item details for timeline
-                var dtItem = await InventoryItemsDL.GetItemByIdAsync(inventoryItemId);
+                // Get item details for timeline (use transaction-aware internal overload)
+                var dtItem = await InventoryItemsDL.GetItemByIdAsync(sqlHelper, inventoryItemId);
                 string itemName = dtItem.Rows.Count > 0 ? dtItem.Rows[0]["ItemName"]?.ToString() ?? "" : "";
 
                 // Log timeline event

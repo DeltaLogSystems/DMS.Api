@@ -9,7 +9,9 @@ namespace DMS.Api.DL
 {
     public static class InventoryItemsDL
     {
-        private static MySQLHelper _sqlHelper = new MySQLHelper();
+        // Removed static shared MySQLHelper to fix concurrency issues
+
+        // Each method creates its own instance for thread-safety
 
         #region Item Code Generation
 
@@ -18,8 +20,17 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<string> GenerateItemCodeAsync(int itemTypeId)
         {
+            using var sqlHelper = new MySQLHelper();
+            return await GenerateItemCodeAsync(sqlHelper, itemTypeId);
+        }
+
+        /// <summary>
+        /// Generate unique inventory item code (internal, transaction-aware)
+        /// </summary>
+        private static async Task<string> GenerateItemCodeAsync(MySQLHelper sqlHelper, int itemTypeId)
+        {
             // Get item type code
-            var dtType = await _sqlHelper.ExecDataTableAsync(
+            var dtType = await sqlHelper.ExecDataTableAsync(
                 "SELECT ItemTypeCode FROM M_Inventory_Item_Types WHERE ItemTypeID = @itemTypeId",
                 "@itemTypeId", itemTypeId
             );
@@ -32,9 +43,9 @@ namespace DMS.Api.DL
             string typeCode = dtType.Rows[0]["ItemTypeCode"]?.ToString() ?? "ITM";
 
             // Get last number for this type
-            var lastNumber = await _sqlHelper.ExecScalarAsync(
-                @"SELECT MAX(CAST(SUBSTRING(ItemCode, LENGTH(@prefix) + 2) AS UNSIGNED)) 
-                  FROM M_Inventory_Items 
+            var lastNumber = await sqlHelper.ExecScalarAsync(
+                @"SELECT MAX(CAST(SUBSTRING(ItemCode, LENGTH(@prefix) + 2) AS UNSIGNED))
+                  FROM M_Inventory_Items
                   WHERE ItemCode LIKE CONCAT(@prefix, '-%')",
                 "@prefix", typeCode
             );
@@ -61,6 +72,7 @@ namespace DMS.Api.DL
             bool? isIndividualQtyTracking = null,
             bool activeOnly = true)
         {
+            using var sqlHelper = new MySQLHelper();
             string query = @"SELECT i.*, 
                                     it.ItemTypeName, it.ItemTypeCode,
                                     ut.UsageTypeName, ut.UsageTypeCode
@@ -106,7 +118,7 @@ namespace DMS.Api.DL
 
             query += " ORDER BY i.ItemName";
 
-            return await _sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
+            return await sqlHelper.ExecDataTableAsync(query, parameters.ToArray());
         }
 
         /// <summary>
@@ -114,8 +126,17 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetItemByIdAsync(int inventoryItemId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
-                @"SELECT i.*, 
+            using var sqlHelper = new MySQLHelper();
+            return await GetItemByIdAsync(sqlHelper, inventoryItemId);
+        }
+
+        /// <summary>
+        /// Get inventory item by ID (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<DataTable> GetItemByIdAsync(MySQLHelper sqlHelper, int inventoryItemId)
+        {
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT i.*,
                          it.ItemTypeName, it.ItemTypeCode,
                          ut.UsageTypeName, ut.UsageTypeCode
                   FROM M_Inventory_Items i
@@ -131,7 +152,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetDialysisRequiredItemsAsync()
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT i.*, 
                          it.ItemTypeName,
                          ut.UsageTypeName
@@ -167,15 +189,16 @@ namespace DMS.Api.DL
             int? reorderLevel,
             int createdBy)
         {
+            using var sqlHelper = new MySQLHelper();
             try
             {
-                await _sqlHelper.BeginTransactionAsync();
+                await sqlHelper.BeginTransactionAsync();
 
-                // Generate item code
-                string itemCode = await GenerateItemCodeAsync(itemTypeId);
+                // Generate item code (use transaction-aware internal overload)
+                string itemCode = await GenerateItemCodeAsync(sqlHelper, itemTypeId);
 
                 // Insert item
-                var result = await _sqlHelper.ExecScalarAsync(
+                var result = await sqlHelper.ExecScalarAsync(
                     @"INSERT INTO M_Inventory_Items 
                       (ItemCode, ItemName, ItemTypeID, UsageTypeID, Description, Manufacturer,
                        MinimumUsageCount, MaximumUsageCount, IsIndividualQtyTracking,
@@ -206,12 +229,12 @@ namespace DMS.Api.DL
                     "@createdBy", createdBy
                 );
 
-                await _sqlHelper.CommitAsync();
+                await sqlHelper.CommitAsync();
                 return Convert.ToInt32(result);
             }
             catch
             {
-                await _sqlHelper.RollbackAsync();
+                await sqlHelper.RollbackAsync();
                 throw;
             }
         }
@@ -237,7 +260,8 @@ namespace DMS.Api.DL
             int? reorderLevel,
             int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Inventory_Items 
                   SET ItemName = @itemName,
                       Description = @description,
@@ -272,7 +296,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> ToggleItemStatusAsync(int inventoryItemId, bool isActive, int modifiedBy)
         {
-            return await _sqlHelper.ExecNonQueryAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecNonQueryAsync(
                 @"UPDATE M_Inventory_Items 
                   SET IsActive = @isActive,
                       ModifiedDate = NOW(),
@@ -293,8 +318,9 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<int> DeleteItemAsync(int inventoryItemId)
         {
+            using var sqlHelper = new MySQLHelper();
             // Check if any stock exists
-            var count = await _sqlHelper.ExecScalarAsync(
+            var count = await sqlHelper.ExecScalarAsync(
                 "SELECT COUNT(*) FROM T_Inventory_Stock WHERE InventoryItemID = @inventoryItemId",
                 "@inventoryItemId", inventoryItemId
             );
@@ -304,7 +330,7 @@ namespace DMS.Api.DL
                 throw new InvalidOperationException("Cannot delete item with existing stock");
             }
 
-            return await _sqlHelper.ExecNonQueryAsync(
+            return await sqlHelper.ExecNonQueryAsync(
                 "DELETE FROM M_Inventory_Items WHERE InventoryItemID = @inventoryItemId",
                 "@inventoryItemId", inventoryItemId
             );
