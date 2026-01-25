@@ -98,7 +98,8 @@ namespace DMS.Api.DL
         /// </summary>
         public static async Task<DataTable> GetStockSummaryAsync(int centerId)
         {
-            return await _sqlHelper.ExecDataTableAsync(
+            using var sqlHelper = new MySQLHelper();
+            return await sqlHelper.ExecDataTableAsync(
                 @"SELECT s.StockID,i.InventoryItemID,i.ItemCode, i.ItemName, i.UnitOfMeasure,
                          SUM(s.Quantity) as TotalQuantity,
                          SUM(s.AvailableQuantity) as TotalAvailable,
