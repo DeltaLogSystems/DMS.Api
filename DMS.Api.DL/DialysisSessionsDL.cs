@@ -387,6 +387,64 @@ namespace DMS.Api.DL
                     await AssetAssignmentsDL.UpdateAssignmentStatusAsync(sqlHelper, Convert.ToInt32(assetAssignmentId), "Completed");
                 }
 
+                // Deduct inventory from stock for all items selected in this session
+                var dtSessionInventory = await SessionInventoryDL.GetSessionInventoryAsync(sqlHelper, sessionId);
+                int patientId = Convert.ToInt32(dtSession.Rows[0]["PatientID"]);
+                int centerId = Convert.ToInt32(dtSession.Rows[0]["CenterID"]);
+
+                foreach (DataRow item in dtSessionInventory.Rows)
+                {
+                    int inventoryItemId = Convert.ToInt32(item["InventoryItemID"]);
+                    int stockId = Convert.ToInt32(item["StockID"]);
+                    decimal quantityUsed = Convert.ToDecimal(item["QuantityUsed"]);
+                    int? individualItemId = item["IndividualItemID"] != DBNull.Value
+                        ? Convert.ToInt32(item["IndividualItemID"])
+                        : null;
+
+                    // Get usage number for individual items
+                    int usageNumber = 1;
+                    if (individualItemId.HasValue)
+                    {
+                        var currentUsage = await sqlHelper.ExecScalarAsync(
+                            "SELECT CurrentUsageCount FROM T_Inventory_Individual_Items WHERE IndividualItemID = @individualItemId",
+                            "@individualItemId", individualItemId.Value
+                        );
+                        usageNumber = Convert.ToInt32(currentUsage) + 1;
+                    }
+
+                    // Record usage in T_Inventory_Usage
+                    await sqlHelper.ExecScalarAsync(
+                        @"INSERT INTO T_Inventory_Usage
+                          (InventoryItemID, IndividualItemID, StockID, CenterID, AppointmentID, PatientID,
+                           UsageDate, QuantityUsed, UsageNumber, ItemCondition, Notes, UsedBy)
+                          VALUES
+                          (@inventoryItemId, @individualItemId, @stockId, @centerId, @appointmentId, @patientId,
+                           NOW(), @quantityUsed, @usageNumber, @itemCondition, @notes, @usedBy);
+                          SELECT LAST_INSERT_ID();",
+                        "@inventoryItemId", inventoryItemId,
+                        "@individualItemId", individualItemId ?? (object)DBNull.Value,
+                        "@stockId", stockId,
+                        "@centerId", centerId,
+                        "@appointmentId", appointmentId,
+                        "@patientId", patientId,
+                        "@quantityUsed", quantityUsed,
+                        "@usageNumber", usageNumber,
+                        "@itemCondition", item["ItemCondition"] != DBNull.Value ? item["ItemCondition"] : (object)DBNull.Value,
+                        "@notes", (object)DBNull.Value,
+                        "@usedBy", completedBy
+                    );
+
+                    // Deduct from stock
+                    if (individualItemId.HasValue)
+                    {
+                        await IndividualItemsDL.IncrementUsageCountAsync(sqlHelper, individualItemId.Value);
+                    }
+                    else
+                    {
+                        await InventoryStockDL.DeductAvailableQuantityAsync(sqlHelper, stockId, (int)quantityUsed);
+                    }
+                }
+
                 // Log timeline event
                 await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionCompleted", "Dialysis session completed successfully", completedBy);
 
