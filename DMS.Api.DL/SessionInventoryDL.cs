@@ -51,6 +51,26 @@ namespace DMS.Api.DL
             return Convert.ToInt32(result) > 0;
         }
 
+        /// <summary>
+        /// Get all inventory items for a session (internal, transaction-aware)
+        /// </summary>
+        internal static async Task<DataTable> GetSessionInventoryAsync(MySQLHelper sqlHelper, int sessionId)
+        {
+            return await sqlHelper.ExecDataTableAsync(
+                @"SELECT si.*,
+                         ii.ItemCode, ii.ItemName, ii.UnitOfMeasure, ii.IsIndividualQtyTracking,
+                         iti.IndividualItemCode, iti.CurrentUsageCount, iti.MaxUsageCount,
+                         s.BatchNumber, s.ExpiryDate
+                  FROM T_Session_Inventory si
+                  INNER JOIN M_Inventory_Items ii ON si.InventoryItemID = ii.InventoryItemID
+                  LEFT JOIN T_Inventory_Individual_Items iti ON si.IndividualItemID = iti.IndividualItemID
+                  LEFT JOIN T_Inventory_Stock s ON si.StockID = s.StockID
+                  WHERE si.SessionID = @sessionId
+                  ORDER BY si.SelectedAt",
+                "@sessionId", sessionId
+            );
+        }
+
         #endregion
 
         #region INSERT Operations
