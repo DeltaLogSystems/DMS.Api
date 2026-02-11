@@ -47,6 +47,17 @@ namespace DMS.Api.Controllers
         {
             try
             {
+                // Get patient ID from session to filter InUse items by patient
+                var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(sessionId);
+                if (dtSession.Rows.Count == 0)
+                {
+                    return Ok(ApiResponse<List<AvailableSessionInventoryResponse>>.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Session not found"
+                    ));
+                }
+                int patientId = Convert.ToInt32(dtSession.Rows[0]["PatientID"]);
+
                 // Get dialysis-required items
                 var dtRequired = await InventoryItemsDL.GetDialysisRequiredItemsAsync();
                 var availableItems = new List<AvailableSessionInventoryResponse>();
@@ -67,8 +78,8 @@ namespace DMS.Api.Controllers
 
                     if (isIndividualTracking)
                     {
-                        // Get individual items
-                        var dtIndividual = await IndividualItemsDL.GetAvailableItemsForSessionAsync(centerId, inventoryItemId);
+                        // Get individual items (filtered by patient for InUse items)
+                        var dtIndividual = await IndividualItemsDL.GetAvailableItemsForSessionAsync(centerId, inventoryItemId, patientId);
                         availableItem.IndividualItems = new List<AvailableIndividualItem>();
 
                         foreach (DataRow indRow in dtIndividual.Rows)
