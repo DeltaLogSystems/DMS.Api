@@ -77,18 +77,18 @@ namespace DMS.Api.DL
         /// <summary>
         /// Get available items for selection in dialysis session
         /// </summary>
-        public static async Task<DataTable> GetAvailableItemsForSessionAsync(int centerId, int inventoryItemId)
+        public static async Task<DataTable> GetAvailableItemsForSessionAsync(int centerId, int inventoryItemId, int patientId)
         {
             using var sqlHelper = new MySQLHelper();
             return await sqlHelper.ExecDataTableAsync(
-                @"SELECT ii.*, 
+                @"SELECT ii.*,
                          i.ItemCode, i.ItemName, i.MinimumUsageCount, i.MaximumUsageCount,
                          s.BatchNumber, s.ExpiryDate,
                          (ii.MaxUsageCount - ii.CurrentUsageCount) as RemainingUses,
-                         CASE 
+                         CASE
                              WHEN ii.CurrentUsageCount = 0 THEN 'New'
                              WHEN ii.CurrentUsageCount < i.MinimumUsageCount THEN 'Below Minimum'
-                             WHEN ii.CurrentUsageCount >= i.MinimumUsageCount 
+                             WHEN ii.CurrentUsageCount >= i.MinimumUsageCount
                                   AND ii.CurrentUsageCount < ii.MaxUsageCount THEN 'Can Use'
                              ELSE 'Exhausted'
                          END as UsageStatus
@@ -98,11 +98,18 @@ namespace DMS.Api.DL
                   WHERE ii.CenterID = @centerId
                   AND ii.InventoryItemID = @inventoryItemId
                   AND ii.IsAvailable = 1
-                  AND ii.ItemStatus IN ('Available', 'InUse')
+                  AND (
+                      ii.ItemStatus = 'Available'
+                      OR (ii.ItemStatus = 'InUse' AND ii.IndividualItemID IN (
+                          SELECT u.IndividualItemID FROM T_Inventory_Usage u
+                          WHERE u.IndividualItemID = ii.IndividualItemID
+                          AND u.PatientID = @patientId
+                      ))
+                  )
                   AND s.IsActive = 1
                   AND (s.ExpiryDate IS NULL OR s.ExpiryDate >= CURDATE())
-                  ORDER BY 
-                      CASE 
+                  ORDER BY
+                      CASE
                           WHEN ii.CurrentUsageCount > 0 AND ii.CurrentUsageCount < ii.MaxUsageCount THEN 1
                           WHEN ii.CurrentUsageCount = 0 THEN 2
                           ELSE 3
@@ -110,7 +117,8 @@ namespace DMS.Api.DL
                       ii.CurrentUsageCount DESC,
                       s.ExpiryDate ASC",
                 "@centerId", centerId,
-                "@inventoryItemId", inventoryItemId
+                "@inventoryItemId", inventoryItemId,
+                "@patientId", patientId
             );
         }
 
