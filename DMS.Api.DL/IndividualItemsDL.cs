@@ -174,7 +174,7 @@ namespace DMS.Api.DL
                       FirstUsedDate = COALESCE(FirstUsedDate, NOW()),
                       ItemStatus = CASE
                           WHEN CurrentUsageCount + 1 >= MaxUsageCount THEN 'Exhausted'
-                          ELSE 'InUse'
+                          ELSE 'Available'
                       END,
                       IsAvailable = CASE
                           WHEN CurrentUsageCount + 1 >= MaxUsageCount THEN 0
