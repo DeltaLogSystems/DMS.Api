@@ -90,11 +90,12 @@ namespace DMS.Api.Controllers
         [HttpGet("available-for-session")]
         public async Task<IActionResult> GetAvailableItemsForSession(
             [FromQuery] int centerId,
-            [FromQuery] int inventoryItemId)
+            [FromQuery] int inventoryItemId,
+            [FromQuery] int patientId = 0)
         {
             try
             {
-                var dt = await IndividualItemsDL.GetAvailableItemsForSessionAsync(centerId, inventoryItemId);
+                var dt = await IndividualItemsDL.GetAvailableItemsForSessionAsync(centerId, inventoryItemId, patientId);
 
                 var items = new List<object>();
                 foreach (DataRow row in dt.Rows)
