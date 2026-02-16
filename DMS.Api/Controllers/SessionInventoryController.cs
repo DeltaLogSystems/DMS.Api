@@ -51,7 +51,7 @@ namespace DMS.Api.Controllers
                 var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(sessionId);
                 if (dtSession.Rows.Count == 0)
                 {
-                    return Ok(ApiResponse<List<AvailableSessionInventoryResponse>>.ErrorResponse(
+                    return NotFound(ApiResponse<List<AvailableSessionInventoryResponse>>.ErrorResponse(
                         ResponseStatus.NotFound,
                         "Session not found"
                     ));
@@ -170,7 +170,7 @@ namespace DMS.Api.Controllers
                 var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(request.SessionID);
                 if (dtSession.Rows.Count == 0)
                 {
-                    return Ok(ApiResponse<int>.ErrorResponse(
+                    return NotFound(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.NotFound,
                         "Session not found"
                     ));
@@ -179,7 +179,7 @@ namespace DMS.Api.Controllers
                 string sessionStatus = dtSession.Rows[0]["SessionStatus"]?.ToString() ?? "";
                 if (sessionStatus != "Not Started")
                 {
-                    return Ok(ApiResponse<int>.ErrorResponse(
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.ValidationError,
                         "Cannot add inventory after session has started"
                     ));
@@ -193,7 +193,7 @@ namespace DMS.Api.Controllers
 
                 if (alreadyAdded)
                 {
-                    return Ok(ApiResponse<int>.ErrorResponse(
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.ValidationError,
                         "This item is already added to the session"
                     ));
@@ -205,7 +205,7 @@ namespace DMS.Api.Controllers
                     var dtIndividual = await IndividualItemsDL.GetIndividualItemByIdAsync(request.IndividualItemID.Value);
                     if (dtIndividual.Rows.Count == 0)
                     {
-                        return Ok(ApiResponse<int>.ErrorResponse(
+                        return NotFound(ApiResponse<int>.ErrorResponse(
                             ResponseStatus.NotFound,
                             "Individual item not found"
                         ));
@@ -214,7 +214,7 @@ namespace DMS.Api.Controllers
                     bool isAvailable = Convert.ToBoolean(dtIndividual.Rows[0]["IsAvailable"]);
                     if (!isAvailable)
                     {
-                        return Ok(ApiResponse<int>.ErrorResponse(
+                        return BadRequest(ApiResponse<int>.ErrorResponse(
                             ResponseStatus.ValidationError,
                             "Selected item is not available"
                         ));
@@ -261,7 +261,7 @@ namespace DMS.Api.Controllers
                 var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(request.SessionID);
                 if (dtSession.Rows.Count == 0)
                 {
-                    return Ok(ApiResponse<int>.ErrorResponse(
+                    return NotFound(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.NotFound,
                         "Session not found"
                     ));
@@ -270,7 +270,7 @@ namespace DMS.Api.Controllers
                 string sessionStatus = dtSession.Rows[0]["SessionStatus"]?.ToString() ?? "";
                 if (sessionStatus != "Not Started")
                 {
-                    return Ok(ApiResponse<int>.ErrorResponse(
+                    return BadRequest(ApiResponse<int>.ErrorResponse(
                         ResponseStatus.ValidationError,
                         "Cannot add inventory after session has started"
                     ));
@@ -347,7 +347,7 @@ namespace DMS.Api.Controllers
                     ));
                 }
 
-                return Ok(ApiResponse.ErrorResponse(
+                return NotFound(ApiResponse.ErrorResponse(
                     ResponseStatus.NotFound,
                     "Inventory item not found in session"
                 ));

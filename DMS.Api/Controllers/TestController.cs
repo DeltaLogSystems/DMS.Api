@@ -2,6 +2,7 @@
 using DMS.Api.DL;
 using System.Data;
 
+#if DEBUG
 namespace DMS.Api.Controllers
 {
     [ApiController]
@@ -167,3 +168,4 @@ namespace DMS.Api.Controllers
         }
     }
 }
+#endif

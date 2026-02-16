@@ -6,16 +6,14 @@ var builder = WebApplication.CreateBuilder(args);
 AppSettingsService.Initialize(builder.Configuration);
 
 // Add CORS
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+                     ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", builder =>
+    options.AddPolicy("AllowAll", corsBuilder =>
     {
-        builder.WithOrigins(
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "https://dms.deltalogapp.online",      // ✅ ADD THIS
-                "http://dms.deltalogapp.online"        // ✅ ADD THIS
-               )
+        corsBuilder.WithOrigins(allowedOrigins)
                .AllowAnyMethod()
                .AllowAnyHeader()
                .AllowCredentials();
