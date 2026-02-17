@@ -535,6 +535,191 @@ namespace DMS.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Cancel dialysis session (only allowed for Not Started sessions)
+        /// </summary>
+        [HttpPut("{id}/cancel")]
+        public async Task<IActionResult> CancelSession(int id, [FromBody] CancelSessionRequest request)
+        {
+            try
+            {
+                // Validate
+                if (string.IsNullOrWhiteSpace(request.CancellationReason))
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Cancellation reason is required"
+                    ));
+                }
+
+                var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(id);
+                if (dtSession.Rows.Count == 0)
+                {
+                    return NotFound(ApiResponse.ErrorResponse(
+                        ResponseStatus.NotFound,
+                        "Session not found"
+                    ));
+                }
+
+                string currentStatus = dtSession.Rows[0]["SessionStatus"]?.ToString() ?? "";
+                if (currentStatus != "Not Started")
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        $"Cannot cancel session. Only 'Not Started' sessions can be cancelled. Current status: {currentStatus}"
+                    ));
+                }
+
+                // Cancel session
+                int result = await DialysisSessionsDL.CancelDialysisSessionAsync(
+                    id,
+                    request.CancellationReason,
+                    request.CancelledBy
+                );
+
+                if (result > 0)
+                {
+                    var dt = await DialysisSessionsDL.GetSessionByIdAsync(id);
+                    var session = ConvertRowToSession(dt.Rows[0]);
+
+                    return Ok(ApiResponse<DialysisSessionResponse>.SuccessResponse(
+                        ResponseStatus.DataUpdated,
+                        "Session cancelled successfully. Appointment status updated to 'Cancelled'.",
+                        session
+                    ));
+                }
+
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    "Failed to cancel session"
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error cancelling session: {ex.Message}"
+                ));
+            }
+        }
+
+        /// <summary>
+        /// Cancel multiple dialysis sessions (bulk operation)
+        /// </summary>
+        [HttpPost("bulk-cancel")]
+        public async Task<IActionResult> BulkCancelSessions([FromBody] BulkCancelSessionsRequest request)
+        {
+            try
+            {
+                if (request.SessionIds == null || request.SessionIds.Count == 0)
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "At least one session ID is required"
+                    ));
+                }
+
+                if (string.IsNullOrWhiteSpace(request.CancellationReason))
+                {
+                    return BadRequest(ApiResponse.ErrorResponse(
+                        ResponseStatus.ValidationError,
+                        "Cancellation reason is required"
+                    ));
+                }
+
+                var results = new List<BulkOperationResult>();
+                int successCount = 0;
+                int failCount = 0;
+
+                foreach (var sessionId in request.SessionIds)
+                {
+                    try
+                    {
+                        var dtSession = await DialysisSessionsDL.GetSessionByIdAsync(sessionId);
+                        if (dtSession.Rows.Count == 0)
+                        {
+                            results.Add(new BulkOperationResult
+                            {
+                                SessionID = sessionId,
+                                Success = false,
+                                Message = "Session not found"
+                            });
+                            failCount++;
+                            continue;
+                        }
+
+                        string currentStatus = dtSession.Rows[0]["SessionStatus"]?.ToString() ?? "";
+                        if (currentStatus != "Not Started")
+                        {
+                            results.Add(new BulkOperationResult
+                            {
+                                SessionID = sessionId,
+                                Success = false,
+                                Message = $"Cannot cancel - status is '{currentStatus}'"
+                            });
+                            failCount++;
+                            continue;
+                        }
+
+                        int result = await DialysisSessionsDL.CancelDialysisSessionAsync(
+                            sessionId,
+                            request.CancellationReason,
+                            request.CancelledBy
+                        );
+
+                        if (result > 0)
+                        {
+                            results.Add(new BulkOperationResult
+                            {
+                                SessionID = sessionId,
+                                Success = true,
+                                Message = "Cancelled successfully"
+                            });
+                            successCount++;
+                        }
+                        else
+                        {
+                            results.Add(new BulkOperationResult
+                            {
+                                SessionID = sessionId,
+                                Success = false,
+                                Message = "Failed to cancel"
+                            });
+                            failCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add(new BulkOperationResult
+                        {
+                            SessionID = sessionId,
+                            Success = false,
+                            Message = ex.Message
+                        });
+                        failCount++;
+                    }
+                }
+
+                return Ok(ApiResponse<BulkCancelResponse>.SuccessResponse(
+                    ResponseStatus.DataUpdated,
+                    $"Bulk cancel completed: {successCount} succeeded, {failCount} failed",
+                    new BulkCancelResponse
+                    {
+                        SuccessCount = successCount,
+                        FailCount = failCount,
+                        Results = results
+                    }
+                ));
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ApiResponse.ErrorResponse(
+                    ResponseStatus.InternalServerError,
+                    $"Error in bulk cancel: {ex.Message}"
+                ));
+            }
+        }
+
         #endregion
 
         #region Helper Methods

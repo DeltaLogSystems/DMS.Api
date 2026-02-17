@@ -132,13 +132,52 @@ namespace DMS.Api.DL
         {
             using var sqlHelper = new MySQLHelper();
             var result = await sqlHelper.ExecNonQueryAsync(
-                @"UPDATE L_Center_Configuration 
+                @"UPDATE L_Center_Configuration
                   SET MachineSessionHours = @machineSessionHours,
                       IsFixedHoursForSession = @isFixedHoursForSession
                   WHERE CenterID = @centerId",
                 "@centerId", centerId,
                 "@machineSessionHours", machineSessionHours.HasValue ? (object)machineSessionHours.Value : DBNull.Value,
                 "@isFixedHoursForSession", isFixedHoursForSession
+            );
+            return result;
+        }
+
+        /// <summary>
+        /// Update full configuration by center ID (including scheduling and auto-cancel settings)
+        /// </summary>
+        public static async Task<int> UpdateFullConfigurationByCenterIdAsync(
+            int centerId,
+            decimal? machineSessionHours,
+            bool isFixedHoursForSession,
+            TimeSpan centerOpenTime,
+            TimeSpan centerCloseTime,
+            int slotDuration,
+            bool autoCancelOverdueAppointments,
+            bool autoCancelOverdueSessions,
+            int overdueThresholdHours)
+        {
+            using var sqlHelper = new MySQLHelper();
+            var result = await sqlHelper.ExecNonQueryAsync(
+                @"UPDATE L_Center_Configuration
+                  SET MachineSessionHours = @machineSessionHours,
+                      IsFixedHoursForSession = @isFixedHoursForSession,
+                      CenterOpenTime = @centerOpenTime,
+                      CenterCloseTime = @centerCloseTime,
+                      SlotDuration = @slotDuration,
+                      AutoCancelOverdueAppointments = @autoCancelOverdueAppointments,
+                      AutoCancelOverdueSessions = @autoCancelOverdueSessions,
+                      OverdueThresholdHours = @overdueThresholdHours
+                  WHERE CenterID = @centerId",
+                "@centerId", centerId,
+                "@machineSessionHours", machineSessionHours.HasValue ? (object)machineSessionHours.Value : DBNull.Value,
+                "@isFixedHoursForSession", isFixedHoursForSession,
+                "@centerOpenTime", centerOpenTime,
+                "@centerCloseTime", centerCloseTime,
+                "@slotDuration", slotDuration,
+                "@autoCancelOverdueAppointments", autoCancelOverdueAppointments,
+                "@autoCancelOverdueSessions", autoCancelOverdueSessions,
+                "@overdueThresholdHours", overdueThresholdHours
             );
             return result;
         }
