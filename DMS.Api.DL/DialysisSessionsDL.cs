@@ -518,6 +518,59 @@ namespace DMS.Api.DL
             }
         }
 
+        /// <summary>
+        /// Cancel a dialysis session (only allowed for Not Started sessions)
+        /// Updates both session and appointment status
+        /// </summary>
+        public static async Task<int> CancelDialysisSessionAsync(
+            int sessionId,
+            string cancellationReason,
+            int cancelledBy)
+        {
+            using var sqlHelper = new MySQLHelper();
+            try
+            {
+                await sqlHelper.BeginTransactionAsync();
+
+                var dtSession = await GetSessionByIdAsync(sessionId);
+                if (dtSession.Rows.Count == 0)
+                {
+                    throw new Exception("Session not found");
+                }
+
+                int appointmentId = Convert.ToInt32(dtSession.Rows[0]["AppointmentID"]);
+
+                // Update session to Cancelled
+                var result = await sqlHelper.ExecNonQueryAsync(
+                    @"UPDATE T_Dialysis_Sessions
+                      SET SessionStatus = 'Cancelled',
+                          CancellationReason = @cancellationReason,
+                          CancelledBy = @cancelledBy,
+                          CancelledDate = NOW(),
+                          ModifiedDate = NOW(),
+                          ModifiedBy = @cancelledBy
+                      WHERE SessionID = @sessionId",
+                    "@sessionId", sessionId,
+                    "@cancellationReason", cancellationReason,
+                    "@cancelledBy", cancelledBy
+                );
+
+                // Update appointment status to Cancelled (Status 5 = Cancelled)
+                await AppointmentsDL.UpdateAppointmentStatusAsync(sqlHelper, appointmentId, 5, cancelledBy);
+
+                // Log timeline event
+                await InsertTimelineEventAsync(sqlHelper, sessionId, "SessionCancelled", $"Session cancelled: {cancellationReason}", cancelledBy);
+
+                await sqlHelper.CommitAsync();
+                return result;
+            }
+            catch
+            {
+                await sqlHelper.RollbackAsync();
+                throw;
+            }
+        }
+
         #endregion
 
         #region Timeline Operations
